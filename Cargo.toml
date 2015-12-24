@@ -1,0 +1,8 @@
+[package]
+name = "mmo"
+version = "0.1.0"
+authors = ["bho"]
+
+[dependencies]
+glutin = "0.4.4"
+gl = "0.5.2"
