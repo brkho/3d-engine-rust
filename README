@@ -1,3 +1,8 @@
-This is a 2D game written in Rust for educational purposes.
+Work in progress of a 2D game using glutin for context creation/input
+handling and gl-rs for OpenGL bindings. The game will be a simple top down
+action-RPG created for educational purposes to assess the viability of Rust
+as a video game development language.
 
-I will use OpenGL and glutin.
+Brian Ho
+brian@brkho.com
+December 2015
