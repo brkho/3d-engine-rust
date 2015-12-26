@@ -23,14 +23,18 @@ use std::fs::File;
 use std::io::Read;
 
 use std::process;
-use std::thread;
-use std::time::Duration;
 
 // The vertex data to be rendered.
-static VERTEX_DATA: [GLfloat; 15] = [
-     0.0,  0.5, 1.0, 0.0, 0.0,
-     0.5, -0.5, 0.0, 1.0, 0.0,
-    -0.5, -0.5, 0.0, 0.0, 1.0
+static VERTEX_DATA: [GLfloat; 12] = [
+    -0.5,  0.5, 1.0, // Top-left
+     0.5,  0.5, 0.66, // Top-right
+     0.5, -0.5, 0.33, // Bottom-right
+    -0.5, -0.5, 0.0  // Bottom-left
+];
+
+static ELEMENT_DATA: [GLuint; 6] = [
+    0, 1, 2,
+    2, 3, 0
 ];
 
 // Compile the shader given a path to an external GLSL file. This is mostly
@@ -110,6 +114,7 @@ fn main() {
     let program = link_program(vs, fs);
     let mut vao = 0;
     let mut vbo = 0;
+    let mut ebo = 0;
 
     unsafe {
         // Create Vertex Array Object
@@ -119,10 +124,11 @@ fn main() {
         // Create a Vertex Buffer Object and copy the vertex data to it
         gl::GenBuffers(1, &mut vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-        gl::BufferData(gl::ARRAY_BUFFER,
-                       (VERTEX_DATA.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-                       mem::transmute(&VERTEX_DATA[0]),
-                       gl::STATIC_DRAW);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (VERTEX_DATA.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+            mem::transmute(&VERTEX_DATA[0]),
+            gl::STATIC_DRAW);
 
         // Use shader program
         gl::UseProgram(program);
@@ -135,17 +141,23 @@ fn main() {
         gl::EnableVertexAttribArray(pos_attr as GLuint);
         gl::VertexAttribPointer(
             pos_attr as GLuint, 2, gl::FLOAT,
-            gl::FALSE as GLboolean, (5 * mem::size_of::<GLfloat>()) as GLsizei,
+            gl::FALSE as GLboolean, (3 * mem::size_of::<GLfloat>()) as GLsizei,
             ptr::null());
-
-
         let col_attr = gl::GetAttribLocation(
             program, CString::new("color").unwrap().as_ptr());
         gl::EnableVertexAttribArray(col_attr as GLuint);
         gl::VertexAttribPointer(
-            col_attr as GLuint, 3, gl::FLOAT,
-            gl::FALSE as GLboolean, (5 * mem::size_of::<GLfloat>()) as GLsizei,
+            col_attr as GLuint, 1, gl::FLOAT,
+            gl::FALSE as GLboolean, (3 * mem::size_of::<GLfloat>()) as GLsizei,
             (2 * mem::size_of::<GLfloat>()) as (*const std::os::raw::c_void));
+
+        gl::GenBuffers(1, &mut ebo);
+        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+        gl::BufferData(
+            gl::ELEMENT_ARRAY_BUFFER,
+            (ELEMENT_DATA.len() * mem::size_of::<GLuint>()) as GLsizeiptr,
+            mem::transmute(&ELEMENT_DATA[0]),
+            gl::STATIC_DRAW);
 
         // let uni_color = gl::GetUniformLocation(
         //     program, CString::new("triangle_color").unwrap().as_ptr());
@@ -175,7 +187,8 @@ fn main() {
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
             // Draw a triangle from the 3 vertices
-            gl::DrawArrays(gl::TRIANGLES, 0, 3);
+            gl::DrawElements(
+                gl::TRIANGLES, 6, gl::UNSIGNED_INT, 0 as (*const std::os::raw::c_void));
         }
 
         // We can update and draw here after we handle events and swap buffers.
