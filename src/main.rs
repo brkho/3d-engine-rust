@@ -10,6 +10,7 @@
 
 extern crate glutin;
 extern crate gl;
+extern crate time;
 
 use glutin::{Event, Window};
 
@@ -26,10 +27,10 @@ use std::thread;
 use std::time::Duration;
 
 // The vertex data to be rendered.
-static VERTEX_DATA: [GLfloat; 6] = [
-     0.0,  0.5,
-     0.5, -0.5,
-    -0.5, -0.5
+static VERTEX_DATA: [GLfloat; 15] = [
+     0.0,  0.5, 1.0, 0.0, 0.0,
+     0.5, -0.5, 0.0, 1.0, 0.0,
+    -0.5, -0.5, 0.0, 0.0, 1.0
 ];
 
 // Compile the shader given a path to an external GLSL file. This is mostly
@@ -129,14 +130,37 @@ fn main() {
                                  CString::new("out_color").unwrap().as_ptr());
 
         // Specify the layout of the vertex data
-        let pos_attr = gl::GetAttribLocation(program,
-                                             CString::new("position").unwrap().as_ptr());
+        let pos_attr = gl::GetAttribLocation(
+            program, CString::new("position").unwrap().as_ptr());
         gl::EnableVertexAttribArray(pos_attr as GLuint);
-        gl::VertexAttribPointer(pos_attr as GLuint, 2, gl::FLOAT,
-                                gl::FALSE as GLboolean, 0, ptr::null());
+        gl::VertexAttribPointer(
+            pos_attr as GLuint, 2, gl::FLOAT,
+            gl::FALSE as GLboolean, (5 * mem::size_of::<GLfloat>()) as GLsizei,
+            ptr::null());
+
+
+        let col_attr = gl::GetAttribLocation(
+            program, CString::new("color").unwrap().as_ptr());
+        gl::EnableVertexAttribArray(col_attr as GLuint);
+        gl::VertexAttribPointer(
+            col_attr as GLuint, 3, gl::FLOAT,
+            gl::FALSE as GLboolean, (5 * mem::size_of::<GLfloat>()) as GLsizei,
+            (2 * mem::size_of::<GLfloat>()) as (*const std::os::raw::c_void));
+
+        // let uni_color = gl::GetUniformLocation(
+        //     program, CString::new("triangle_color").unwrap().as_ptr());
+        // gl::Uniform3f(uni_color as GLint, 1.0, 0.0, 0.0);
+
     }
 
+    let mut last_time = time::now().to_timespec();
     loop {
+        // Get elapsed time since last update in ms.
+        let curr_time = time::now().to_timespec();
+        let delta = (curr_time - last_time).num_milliseconds();
+        println!("time elapsed: {}", delta);
+        last_time = curr_time;
+
         // poll_events returns an iterator for Event which we match against.
         for event in window.poll_events() {
             match event {
@@ -156,9 +180,5 @@ fn main() {
 
         // We can update and draw here after we handle events and swap buffers.
         window.swap_buffers().unwrap();
-
-        // Sleep one second in between calls.
-        let one_second = Duration::from_millis(10);
-        thread::sleep(one_second);
     }
 }
