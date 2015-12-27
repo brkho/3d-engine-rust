@@ -31,7 +31,7 @@ struct DIBHeader {
 struct DecodedBMP<'a> {
     width: u32,
     height: u32,
-    data: &'a [Pixel],
+    data: &'a Vec<Pixel>,
 }
 
 // Consumes n bytes from the data vector by advancing the cursor while also performing error
@@ -45,6 +45,7 @@ fn consume_n(data: &Vec<u8>, cursor: &mut usize, n: usize) -> Result<(), String>
     Ok(())
 }
 
+// Reads and consumes n bytes from the data vector and returns a slice of the data if successful.
 fn read_n_bytes<'a>(data: &'a Vec<u8>, cursor: &mut usize, n: usize)
         -> Result<&'a [u8], String> {
     let orig = *cursor;
@@ -52,6 +53,7 @@ fn read_n_bytes<'a>(data: &'a Vec<u8>, cursor: &mut usize, n: usize)
     Ok(&data[orig..(orig + n)])
 }
 
+// Reads and consumes 4 bytes from the data vector and casts the result to a u32.
 fn read_dword(data: &Vec<u8>, cursor: &mut usize) -> Result<u32, String> {
     let bytes = try!(read_n_bytes(data, cursor, 4));
     let mut barr = [0; 4];
@@ -62,6 +64,19 @@ fn read_dword(data: &Vec<u8>, cursor: &mut usize) -> Result<u32, String> {
         }
     }
     unsafe { Ok(mem::transmute::<[u8; 4], u32>(barr)) }
+}
+
+// Reads and consumes 2 bytes from the data vector and casts the result to a u16.
+fn read_word(data: &Vec<u8>, cursor: &mut usize) -> Result<u16, String> {
+    let bytes = try!(read_n_bytes(data, cursor, 2));
+    let mut barr = [0; 2];
+    for i in 0..2 {
+        barr[i] = match bytes.get(i) {
+            Some(v) => *v,
+            None => return Err("Incorrect byte access.".to_string()),
+        }
+    }
+    unsafe { Ok(mem::transmute::<[u8; 2], u16>(barr)) }
 }
 
 // Reads and consumes the initial BMP file header. This also performs the bare minimum amount of
@@ -80,14 +95,23 @@ fn read_bmp_header(data: &Vec<u8>, cursor: &mut usize) -> Result<(), String> {
 // functions to consume and read values from the DIB header to build a DIBHeader struct. We then
 // return the constructed DIBHeader.
 fn read_dib_header(data: &Vec<u8>, cursor: &mut usize) -> Result<DIBHeader, String> {
-    match try!(read_dword(data, cursor)) {
-        40 | 52 | 56 | 108 | 124 => (), // Various BITMAPINFOHEADER versions.
+    let length = match try!(read_dword(data, cursor)) {
+        l @ 40 | l @ 52 | l @ 56 | l @ 108 | l @ 124 => l, // Various BITMAPINFOHEADER versions.
         _ => return Err("Unsupported DIB header.".to_string()),
-    }
+    };
     let width = try!(read_dword(data, cursor));
     let height = try!(read_dword(data, cursor));
+    try!(consume_n(data, cursor, 2));
+    let depth = try!(read_word(data, cursor));
+    try!(consume_n(data, cursor, length as usize - 10));
+    Ok(DIBHeader {width: width, height: height, depth: depth})
+}
 
-    return Err("lala".to_string())
+fn read_pixel_array<'a>(data: &Vec<u8>, cursor: &mut usize, info: &DIBHeader)
+        -> Result<&'a Vec<Pixel>, String> {
+
+
+    Err("hmm...".to_string())
 }
 
 // Decodes a BMP given a path to the file and returns a DecodedBMP struct containing the pixel
@@ -99,12 +123,13 @@ fn decode_bmp(fpath: &str) -> Result<DecodedBMP, String> {
 
     let mut cursor = 0;
     try!(read_bmp_header(&data, &mut cursor));
+    let info = try!(read_dib_header(&data, &mut cursor));
+    let pixel_arr = try!(read_pixel_array(&data, &mut cursor, &info));
     println!("cursor: {}", cursor);
 
 
 
-
-    Err("SUCCESS".to_string())
+    Ok(DecodedBMP {width: info.width, height: info.height, data: pixel_arr})
 }
 
 // Driver test function.
