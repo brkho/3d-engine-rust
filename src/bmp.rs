@@ -31,7 +31,7 @@ struct DIBHeader {
 struct DecodedBMP {
     width: u32,
     height: u32,
-    data: Vec<Pixel>,
+    data: Vec<Vec<Pixel>>,
 }
 
 // Consumes n bytes from the data vector by advancing the cursor while also performing error
@@ -113,29 +113,29 @@ fn read_dib_header(data: &Vec<u8>, cursor: &mut usize) -> Result<DIBHeader, Stri
         d @ 24 | d @ 32 => d, // Only support bit depths of 24 and 36.
         _ => return Err("Unsupported bit depth.".to_string()),
     };
-    try!(consume_n(data, cursor, length as usize - 12 - 4));
+    try!(consume_n(data, cursor, length as usize - 16));
     Ok(DIBHeader {width: width, height: height, depth: depth})
 }
 
 // Reads in the pixel array from the data vector and returns a vector of Pixels.
 fn read_pixel_array(data: &Vec<u8>, cursor: &mut usize, info: &DIBHeader)
-        -> Result<Vec<Pixel>, String> {
+        -> Result<Vec<Vec<Pixel>>, String> {
     let pad_bytes = info.width % 4;
-    println!("remainder: {}", pad_bytes);
     let mut pixel_arr = Vec::new();
-    for i in 0..(info.height) {
-        for j in 0..(info.width) {
+    for _ in 0..(info.height) {
+        let mut row_vec = Vec::new();
+        for _ in 0..(info.width) {
             let a = if info.depth == 24 { 0 } else { try!(read_byte(data, cursor)) };
             let b = try!(read_byte(data, cursor));
             let g = try!(read_byte(data, cursor));
             let r = try!(read_byte(data, cursor));
             let pixel = Pixel { red: r, green: g, blue: b, alpha: a };
-            pixel_arr.push(pixel);
-            println!("i: {}, j: {}, r: {}, g: {}, b: {}, a: {}", i, j, r, g, b, a);
+            row_vec.push(pixel);
         }
-        // panic!("at the disco");
+        pixel_arr.push(row_vec);
         try!(consume_n(data, cursor, pad_bytes as usize));
     }
+    pixel_arr.reverse();
     Ok(pixel_arr)
 }
 
@@ -150,11 +150,26 @@ fn decode_bmp(fpath: &str) -> Result<DecodedBMP, String> {
     try!(read_bmp_header(&data, &mut cursor));
     let info = try!(read_dib_header(&data, &mut cursor));
     let pixel_arr = try!(read_pixel_array(&data, &mut cursor, &info));
-    println!("cursor: {}", cursor);
     Ok(DecodedBMP {width: info.width, height: info.height, data: pixel_arr})
 }
 
 // Driver test function.
 fn main() {
-    decode_bmp("test_texture.bmp").unwrap();
+    let decoded = decode_bmp("test_texture.bmp").unwrap();
+    for i in 0..decoded.height {
+        for j in 0..decoded.width {
+            let p = decoded.data.get(i as usize).unwrap().get(j as usize).unwrap();
+            let l = match (p.red, p.green, p.blue, p.alpha) {
+                (255, 0, 0, 255) => "R",
+                (255, 255, 0, 255) => "Y",
+                (0, 255, 0, 255) => "G",
+                (0, 0, 255, 255) => "B",
+                (0, 0, 0, 255) => "D",
+                (255, 255, 255, 255) => "W",
+                _ => "X",
+            };
+            print!("{}", l);
+        }
+        print!("\n");
+    }
 }
