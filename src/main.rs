@@ -56,9 +56,9 @@ fn compile_shader(path: &str, ty: GLenum) -> GLuint {
             // Skip the trailing null character.
             buf.set_len((len as usize) - 1);
             gl::GetShaderInfoLog(
-                shader, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
+                    shader, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
             panic!("{}", str::from_utf8(&buf).ok().expect(
-                "ShaderInfoLog not valid utf8"));
+                    "ShaderInfoLog not valid utf8"));
         }
     }
     shader
@@ -83,28 +83,27 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint { unsafe {
         // Skip the trailing null character.
         buf.set_len((len as usize) - 1);
         gl::GetProgramInfoLog(
-            program, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
+                program, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
         panic!("{}", str::from_utf8(&buf).ok().expect(
-            "ProgramInfoLog not valid utf8"));
+                "ProgramInfoLog not valid utf8"));
     }
     program
 } }
 
 // Main loop for the game.
 fn main() {
-    bmp::decode_bmp("test_texture.bmp").unwrap();
-
     let vertices: Vec<GLfloat> = vec![
-        -0.5,  0.5, 1.0, // Top-left
-         0.5,  0.5, 0.66, // Top-right
-         0.5, -0.5, 0.33, // Bottom-right
-        -0.5, -0.5, 0.0  // Bottom-left
+        -0.5,  0.5, 0.0, 0.0, // Top-left
+         0.5,  0.5, 1.0, 0.0, // Top-right
+         0.5, -0.5, 1.0, 1.0, // Bottom-right
+        -0.5, -0.5, 0.0, 1.0, // Bottom-left
     ];
 
     let elements: Vec<GLuint> = vec![
         0, 1, 2,
         2, 3, 0
     ];
+    let texture = bmp::decode_bmp("test_texture.bmp").unwrap();
 
     // Create the window. Should be using a builder here, but whatever.
     let window = Window::new().unwrap();
@@ -120,18 +119,40 @@ fn main() {
     let mut vao = 0;
     let mut vbo = 0;
     let mut ebo = 0;
+    let mut tex = 0;
 
     unsafe {
-        // Create Vertex Array Object
+        // Create Vertex Array Object.
         gl::GenVertexArrays(1, &mut vao);
         gl::BindVertexArray(vao);
 
-        // Create a Vertex Buffer Object and copy the vertex data to it
+        // Create a Vertex Buffer Object and copy the vertex data to it.
         gl::GenBuffers(1, &mut vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl::BufferData(
                 gl::ARRAY_BUFFER, float_size!(vertices.len(), GLsizeiptr),
                 vec_to_addr!(vertices), gl::STATIC_DRAW);
+
+        // Create Texture Object.
+        gl::GenTextures(1, &mut tex);
+        gl::BindTexture(gl::TEXTURE_2D, tex);
+
+        let image = texture.get_rgb_vec();
+        gl::TexImage2D(
+                gl::TEXTURE_2D, 0, gl::RGB as GLsizei, texture.width as GLsizei,
+                texture.height as GLint, 0, gl::RGB as GLuint, gl::UNSIGNED_BYTE,
+                vec_to_addr!(image));
+        
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as GLint);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as GLint);
+        gl::GenerateMipmap(gl::TEXTURE_2D);
+        gl::TexParameteri(
+                gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER,
+                gl::LINEAR_MIPMAP_NEAREST as GLint);
+        gl::TexParameteri(
+                gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER,
+                gl::LINEAR_MIPMAP_NEAREST as GLint);
+
 
         // Use shader program
         gl::UseProgram(program);
@@ -142,24 +163,19 @@ fn main() {
         gl::EnableVertexAttribArray(pos_attr as GLuint);
         gl::VertexAttribPointer(
                 pos_attr as GLuint, 2, gl::FLOAT, gl::FALSE as GLboolean,
-                float_size!(3, GLsizei), ptr::null());
+                float_size!(4, GLsizei), ptr::null());
 
-        let col_attr = gl::GetAttribLocation(program, gl_str!("color"));
-        gl::EnableVertexAttribArray(col_attr as GLuint);
+        let tex_attr = gl::GetAttribLocation(program, gl_str!("texcoord"));
+        gl::EnableVertexAttribArray(tex_attr as GLuint);
         gl::VertexAttribPointer(
-                col_attr as GLuint, 1, gl::FLOAT, gl::FALSE as GLboolean,
-                float_size!(3, GLsizei), float_size!(2, CVoid));
+                tex_attr as GLuint, 2, gl::FLOAT, gl::FALSE as GLboolean,
+                float_size!(4, GLsizei), float_size!(2, CVoid));
 
         gl::GenBuffers(1, &mut ebo);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
         gl::BufferData(
                 gl::ELEMENT_ARRAY_BUFFER, float_size!(elements.len(), GLsizeiptr),
                 vec_to_addr!(elements), gl::STATIC_DRAW);
-
-        // let uni_color = gl::GetUniformLocation(
-        //     program, CString::new("triangle_color").unwrap().as_ptr());
-        // gl::Uniform3f(uni_color as GLint, 1.0, 0.0, 0.0);
-
     }
 
     let mut last_time = time::now().to_timespec();

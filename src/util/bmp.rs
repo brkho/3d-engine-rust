@@ -34,6 +34,34 @@ pub struct DecodedBMP {
     pub data: Vec<Vec<Pixel>>,
 }
 
+impl DecodedBMP {
+    // Helper method that refactors some of the code common to RGB and RGBA vector creation.
+    fn get_vec_helper(&self, rgba: bool) -> Vec<u8> {
+        let mut bmp_data = Vec::new();
+        for row in &self.data {
+            for pixel in row {
+                bmp_data.push(pixel.red);
+                bmp_data.push(pixel.green);
+                bmp_data.push(pixel.blue);
+                if rgba {
+                    bmp_data.push(pixel.alpha);
+                }
+            }
+        }
+        bmp_data
+    }
+
+    // Creates a one dimensional vector representing the BMP data with RGB channels.
+    pub fn get_rgb_vec(&self) -> Vec<u8> {
+        self.get_vec_helper(false)
+    }
+
+    // Creates a one dimensional vector representing the BMP data with RGBA channels.
+    pub fn get_rgba_vec(&self) -> Vec<u8> {
+        self.get_vec_helper(true)
+    }
+}
+
 // Consumes n bytes from the data vector by advancing the cursor while also performing error
 // checking to see if we remain in bounds.
 fn consume_n(data: &Vec<u8>, cursor: &mut usize, n: usize) -> Result<(), String> {
