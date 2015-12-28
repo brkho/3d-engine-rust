@@ -11,6 +11,7 @@
 extern crate glutin;
 extern crate gl;
 extern crate time;
+extern crate mmo;
 
 use glutin::{Event, Window};
 
@@ -21,21 +22,18 @@ use std::str;
 use std::ffi::CString;
 use std::fs::File;
 use std::io::Read;
-
 use std::process;
-
-// The vertex data to be rendered.
-static VERTEX_DATA: [GLfloat; 12] = [
-    -0.5,  0.5, 1.0, // Top-left
-     0.5,  0.5, 0.66, // Top-right
-     0.5, -0.5, 0.33, // Bottom-right
-    -0.5, -0.5, 0.0  // Bottom-left
-];
+use mmo::util::bmp;
 
 static ELEMENT_DATA: [GLuint; 6] = [
     0, 1, 2,
     2, 3, 0
 ];
+
+type CVoid = *const std::os::raw::c_void;
+macro_rules! float_size { ($n:expr, $t:ty) => (($n * mem::size_of::<GLfloat>()) as $t) }
+macro_rules! vec_to_addr { ($i:ident) => (mem::transmute($i.get_unchecked(0))) }
+macro_rules! gl_str { ($s:expr) => (CString::new($s).unwrap().as_ptr()) }
 
 // Compile the shader given a path to an external GLSL file. This is mostly
 // pulled from the triangle.rs example from the gl-rs repo.
@@ -101,6 +99,15 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint { unsafe {
 
 // Main loop for the game.
 fn main() {
+    bmp::decode_bmp("test_texture.bmp").unwrap();
+
+    let vd: Vec<GLfloat> = vec![
+        -0.5,  0.5, 1.0, // Top-left
+         0.5,  0.5, 0.66, // Top-right
+         0.5, -0.5, 0.33, // Bottom-right
+        -0.5, -0.5, 0.0  // Bottom-left
+    ];
+
     // Create the window. Should be using a builder here, but whatever.
     let window = Window::new().unwrap();
     unsafe { window.make_current().unwrap() };
@@ -125,31 +132,25 @@ fn main() {
         gl::GenBuffers(1, &mut vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl::BufferData(
-            gl::ARRAY_BUFFER,
-            (VERTEX_DATA.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-            mem::transmute(&VERTEX_DATA[0]),
-            gl::STATIC_DRAW);
+                gl::ARRAY_BUFFER, float_size!(vd.len(), GLsizeiptr),
+                vec_to_addr!(vd), gl::STATIC_DRAW);
 
         // Use shader program
         gl::UseProgram(program);
-        gl::BindFragDataLocation(program, 0,
-                                 CString::new("out_color").unwrap().as_ptr());
+        gl::BindFragDataLocation(program, 0, gl_str!("out_color"));
 
         // Specify the layout of the vertex data
-        let pos_attr = gl::GetAttribLocation(
-            program, CString::new("position").unwrap().as_ptr());
+        let pos_attr = gl::GetAttribLocation(program, gl_str!("position"));
         gl::EnableVertexAttribArray(pos_attr as GLuint);
         gl::VertexAttribPointer(
-            pos_attr as GLuint, 2, gl::FLOAT,
-            gl::FALSE as GLboolean, (3 * mem::size_of::<GLfloat>()) as GLsizei,
-            ptr::null());
-        let col_attr = gl::GetAttribLocation(
-            program, CString::new("color").unwrap().as_ptr());
+                pos_attr as GLuint, 2, gl::FLOAT, gl::FALSE as GLboolean,
+                float_size!(3, GLsizei), ptr::null());
+
+        let col_attr = gl::GetAttribLocation(program, gl_str!("color"));
         gl::EnableVertexAttribArray(col_attr as GLuint);
         gl::VertexAttribPointer(
-            col_attr as GLuint, 1, gl::FLOAT,
-            gl::FALSE as GLboolean, (3 * mem::size_of::<GLfloat>()) as GLsizei,
-            (2 * mem::size_of::<GLfloat>()) as (*const std::os::raw::c_void));
+            col_attr as GLuint, 1, gl::FLOAT, gl::FALSE as GLboolean,
+            float_size!(3, GLsizei), float_size!(2, CVoid));
 
         gl::GenBuffers(1, &mut ebo);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
@@ -188,7 +189,7 @@ fn main() {
 
             // Draw a triangle from the 3 vertices
             gl::DrawElements(
-                gl::TRIANGLES, 6, gl::UNSIGNED_INT, 0 as (*const std::os::raw::c_void));
+                gl::TRIANGLES, 6, gl::UNSIGNED_INT, 0 as CVoid);
         }
 
         // We can update and draw here after we handle events and swap buffers.
