@@ -107,6 +107,7 @@ fn main() {
     // Create the window. Should be using a builder here, but whatever.
     let window = Window::new().unwrap();
     unsafe { window.make_current().unwrap() };
+    window.set_title("OpenGL Shenanigans");
 
     // Some magic OpenGL loading with similarly magical closures.
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
@@ -144,8 +145,8 @@ fn main() {
                 brian_tex.height as GLint, 0, gl::RGB as GLuint, gl::UNSIGNED_BYTE,
                 vec_to_addr!(brian_img));
         // println!("Location: {}", gl::GetUniformLocation(program, gl_str!("brian_tex")));
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as GLint);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as GLint);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as GLint);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as GLint);
         gl::GenerateMipmap(gl::TEXTURE_2D);
         gl::TexParameteri(
                 gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER,
@@ -164,8 +165,8 @@ fn main() {
                 gl::TEXTURE_2D, 0, gl::RGB as GLsizei, samantha_tex.width as GLsizei,
                 samantha_tex.height as GLint, 0, gl::RGB as GLuint, gl::UNSIGNED_BYTE,
                 vec_to_addr!(samantha_img));
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as GLint);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as GLint);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::MIRRORED_REPEAT as GLint);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::MIRRORED_REPEAT as GLint);
         gl::GenerateMipmap(gl::TEXTURE_2D);
         gl::TexParameteri(
                 gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER,
@@ -202,11 +203,21 @@ fn main() {
     }
 
     let mut last_time = time::now().to_timespec();
+    let start_time = time::now().to_timespec();
+    let time_location = unsafe { gl::GetUniformLocation(program, gl_str!("elapsed")) };
     loop {
         // Get elapsed time since last update in ms.
         let curr_time = time::now().to_timespec();
+        let elapsed_msec = (time::now().to_timespec() - start_time).num_milliseconds();
+        let elapsed_sec = elapsed_msec as f32 / 1000.0;
         let delta = (curr_time - last_time).num_milliseconds();
-        println!("time elapsed: {}", delta);
+
+        unsafe {
+            gl::Uniform1f(time_location, elapsed_sec);
+        }
+
+
+        // println!("time elapsed: {}", delta);
         last_time = curr_time;
 
         // poll_events returns an iterator for Event which we match against.
