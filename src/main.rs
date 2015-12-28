@@ -103,7 +103,6 @@ fn main() {
         0, 1, 2,
         2, 3, 0
     ];
-    let texture = bmp::decode_bmp("test_texture.bmp").unwrap();
 
     // Create the window. Should be using a builder here, but whatever.
     let window = Window::new().unwrap();
@@ -119,7 +118,7 @@ fn main() {
     let mut vao = 0;
     let mut vbo = 0;
     let mut ebo = 0;
-    let mut tex = 0;
+    let mut textures = vec![0 as u32; 2];
 
     unsafe {
         // Create Vertex Array Object.
@@ -134,15 +133,17 @@ fn main() {
                 vec_to_addr!(vertices), gl::STATIC_DRAW);
 
         // Create Texture Object.
-        gl::GenTextures(1, &mut tex);
-        gl::BindTexture(gl::TEXTURE_2D, tex);
+        gl::GenTextures(2, textures.get_unchecked_mut(0) as *mut u32);
 
-        let image = texture.get_rgb_vec();
+        gl::ActiveTexture(gl::TEXTURE0);
+        gl::BindTexture(gl::TEXTURE_2D, textures[0]);
+        let brian_tex = bmp::decode_bmp("brian.bmp").unwrap();
+        let brian_img = brian_tex.get_rgb_vec();
         gl::TexImage2D(
-                gl::TEXTURE_2D, 0, gl::RGB as GLsizei, texture.width as GLsizei,
-                texture.height as GLint, 0, gl::RGB as GLuint, gl::UNSIGNED_BYTE,
-                vec_to_addr!(image));
-        
+                gl::TEXTURE_2D, 0, gl::RGB as GLsizei, brian_tex.width as GLsizei,
+                brian_tex.height as GLint, 0, gl::RGB as GLuint, gl::UNSIGNED_BYTE,
+                vec_to_addr!(brian_img));
+        // println!("Location: {}", gl::GetUniformLocation(program, gl_str!("brian_tex")));
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as GLint);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as GLint);
         gl::GenerateMipmap(gl::TEXTURE_2D);
@@ -153,6 +154,25 @@ fn main() {
                 gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER,
                 gl::LINEAR_MIPMAP_NEAREST as GLint);
 
+
+
+        gl::ActiveTexture(gl::TEXTURE1);
+        gl::BindTexture(gl::TEXTURE_2D, textures[1]);
+        let samantha_tex = bmp::decode_bmp("samantha.bmp").unwrap();
+        let samantha_img = samantha_tex.get_rgb_vec();
+        gl::TexImage2D(
+                gl::TEXTURE_2D, 0, gl::RGB as GLsizei, samantha_tex.width as GLsizei,
+                samantha_tex.height as GLint, 0, gl::RGB as GLuint, gl::UNSIGNED_BYTE,
+                vec_to_addr!(samantha_img));
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as GLint);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as GLint);
+        gl::GenerateMipmap(gl::TEXTURE_2D);
+        gl::TexParameteri(
+                gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER,
+                gl::LINEAR_MIPMAP_NEAREST as GLint);
+        gl::TexParameteri(
+                gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER,
+                gl::LINEAR_MIPMAP_NEAREST as GLint);
 
         // Use shader program
         gl::UseProgram(program);
@@ -176,6 +196,9 @@ fn main() {
         gl::BufferData(
                 gl::ELEMENT_ARRAY_BUFFER, float_size!(elements.len(), GLsizeiptr),
                 vec_to_addr!(elements), gl::STATIC_DRAW);
+
+        gl::Uniform1i(gl::GetUniformLocation(program, gl_str!("brian_tex")), 0);
+        gl::Uniform1i(gl::GetUniformLocation(program, gl_str!("samantha_tex")), 1);
     }
 
     let mut last_time = time::now().to_timespec();
