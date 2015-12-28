@@ -7,11 +7,11 @@
 // brian@brkho.com
 // December 2015
 
-
+#[macro_use]
+extern crate mmo;
 extern crate glutin;
 extern crate gl;
 extern crate time;
-extern crate mmo;
 
 use glutin::{Event, Window};
 
@@ -25,15 +25,8 @@ use std::io::Read;
 use std::process;
 use mmo::util::bmp;
 
-static ELEMENT_DATA: [GLuint; 6] = [
-    0, 1, 2,
-    2, 3, 0
-];
-
+// Redeclaration of the constant void pointer type for ease of use.
 type CVoid = *const std::os::raw::c_void;
-macro_rules! float_size { ($n:expr, $t:ty) => (($n * mem::size_of::<GLfloat>()) as $t) }
-macro_rules! vec_to_addr { ($i:ident) => (mem::transmute($i.get_unchecked(0))) }
-macro_rules! gl_str { ($s:expr) => (CString::new($s).unwrap().as_ptr()) }
 
 // Compile the shader given a path to an external GLSL file. This is mostly
 // pulled from the triangle.rs example from the gl-rs repo.
@@ -101,11 +94,16 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint { unsafe {
 fn main() {
     bmp::decode_bmp("test_texture.bmp").unwrap();
 
-    let vd: Vec<GLfloat> = vec![
+    let vertices: Vec<GLfloat> = vec![
         -0.5,  0.5, 1.0, // Top-left
          0.5,  0.5, 0.66, // Top-right
          0.5, -0.5, 0.33, // Bottom-right
         -0.5, -0.5, 0.0  // Bottom-left
+    ];
+
+    let elements: Vec<GLuint> = vec![
+        0, 1, 2,
+        2, 3, 0
     ];
 
     // Create the window. Should be using a builder here, but whatever.
@@ -132,8 +130,8 @@ fn main() {
         gl::GenBuffers(1, &mut vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl::BufferData(
-                gl::ARRAY_BUFFER, float_size!(vd.len(), GLsizeiptr),
-                vec_to_addr!(vd), gl::STATIC_DRAW);
+                gl::ARRAY_BUFFER, float_size!(vertices.len(), GLsizeiptr),
+                vec_to_addr!(vertices), gl::STATIC_DRAW);
 
         // Use shader program
         gl::UseProgram(program);
@@ -149,16 +147,14 @@ fn main() {
         let col_attr = gl::GetAttribLocation(program, gl_str!("color"));
         gl::EnableVertexAttribArray(col_attr as GLuint);
         gl::VertexAttribPointer(
-            col_attr as GLuint, 1, gl::FLOAT, gl::FALSE as GLboolean,
-            float_size!(3, GLsizei), float_size!(2, CVoid));
+                col_attr as GLuint, 1, gl::FLOAT, gl::FALSE as GLboolean,
+                float_size!(3, GLsizei), float_size!(2, CVoid));
 
         gl::GenBuffers(1, &mut ebo);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
         gl::BufferData(
-            gl::ELEMENT_ARRAY_BUFFER,
-            (ELEMENT_DATA.len() * mem::size_of::<GLuint>()) as GLsizeiptr,
-            mem::transmute(&ELEMENT_DATA[0]),
-            gl::STATIC_DRAW);
+                gl::ELEMENT_ARRAY_BUFFER, float_size!(elements.len(), GLsizeiptr),
+                vec_to_addr!(elements), gl::STATIC_DRAW);
 
         // let uni_color = gl::GetUniformLocation(
         //     program, CString::new("triangle_color").unwrap().as_ptr());
