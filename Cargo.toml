@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["bho"]
 
 [dependencies]
+cgmath = "0.7.0"
 glutin = "0.4.4"
 gl = "0.5.2"
 time = "0.1.34"

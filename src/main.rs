@@ -9,12 +9,14 @@
 
 #[macro_use]
 extern crate mmo;
+extern crate cgmath;
 extern crate glutin;
 extern crate gl;
 extern crate time;
 
 use glutin::{Event, Window};
 
+use cgmath::*;
 use gl::types::*;
 use std::mem;
 use std::ptr;
@@ -144,7 +146,6 @@ fn main() {
                 gl::TEXTURE_2D, 0, gl::RGB as GLsizei, brian_tex.width as GLsizei,
                 brian_tex.height as GLint, 0, gl::RGB as GLuint, gl::UNSIGNED_BYTE,
                 vec_to_addr!(brian_img));
-        // println!("Location: {}", gl::GetUniformLocation(program, gl_str!("brian_tex")));
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as GLint);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as GLint);
         gl::GenerateMipmap(gl::TEXTURE_2D);
@@ -154,8 +155,6 @@ fn main() {
         gl::TexParameteri(
                 gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER,
                 gl::LINEAR_MIPMAP_NEAREST as GLint);
-
-
 
         gl::ActiveTexture(gl::TEXTURE1);
         gl::BindTexture(gl::TEXTURE_2D, textures[1]);
@@ -205,15 +204,56 @@ fn main() {
     let mut last_time = time::now().to_timespec();
     let start_time = time::now().to_timespec();
     let time_location = unsafe { gl::GetUniformLocation(program, gl_str!("elapsed")) };
+    let model_location = unsafe { gl::GetUniformLocation(program, gl_str!("model")) };
+    let mut model = Decomposed {
+            scale: 1.0,
+            rot: Quaternion::from_axis_angle(vec3(0.0, 0.0, 1.0), Rad::from(deg(0.0))),
+            disp: vec3(0.0, 0.0, 0.0) };
+    let mut view = Matrix4::look_at(
+            Point3::new(1.2, 1.2, 1.4),
+            Point3::new(0.0, 0.0, 0.0),
+            vec3(0.0, 0.0, 1.0));
+    unsafe {
+        let view_location = gl::GetUniformLocation(program, gl_str!("view"));
+        gl::UniformMatrix4fv(
+                view_location, 1, gl::FALSE as GLboolean,
+                view.as_mut_ptr());
+    }
+
+    let (w_width, w_height) = window.get_outer_size().unwrap();
+    let proj = PerspectiveFov {
+            fovy: Rad::from(deg(45.0)),
+            aspect: w_width as f32 / w_height as f32,
+            near: 1.0,
+            far: 10.0 };
+    unsafe {
+        let proj_loaction = gl::GetUniformLocation(program, gl_str!("proj"));
+        gl::UniformMatrix4fv(
+                proj_loaction, 1, gl::FALSE as GLboolean,
+                Matrix4::from(proj).as_mut_ptr());
+    }
+
+    // Constant 60 FPS target frame rate.
+    let mut msec_remaining = 1000.0 / 60.0;
     loop {
         // Get elapsed time since last update in ms.
         let curr_time = time::now().to_timespec();
         let elapsed_msec = (time::now().to_timespec() - start_time).num_milliseconds();
         let elapsed_sec = elapsed_msec as f32 / 1000.0;
-        let delta = (curr_time - last_time).num_milliseconds();
+        let delta = (curr_time - last_time).num_milliseconds() as f32 / 1000.0;
+        msec_remaining -= delta;
+        if msec_remaining > 0.0 {
+            continue;
+        }
+        msec_remaining = 1000.0 / 60.0;
 
         unsafe {
             gl::Uniform1f(time_location, elapsed_sec);
+            model.rot = Quaternion::from_axis_angle(
+                    vec3(0.0, 0.0, 1.0), Rad::from(deg(elapsed_sec * 30.0)));
+            gl::UniformMatrix4fv(
+                    model_location, 1, gl::FALSE as GLboolean,
+                    Matrix4::from(model).as_mut_ptr());
         }
 
 

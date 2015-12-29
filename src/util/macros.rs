@@ -18,4 +18,3 @@ macro_rules! vec_to_addr { ($i:ident) => (mem::transmute($i.get_unchecked(0))) }
 #[macro_export]
 // Macro for converting between &str and a GL readable string.
 macro_rules! gl_str { ($s:expr) => (CString::new($s).unwrap().as_ptr()) }
-
