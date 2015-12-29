@@ -95,16 +95,61 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint { unsafe {
 // Main loop for the game.
 fn main() {
     let vertices: Vec<GLfloat> = vec![
-        -0.5,  0.5, 0.0, 0.0, // Top-left
-         0.5,  0.5, 1.0, 0.0, // Top-right
-         0.5, -0.5, 1.0, 1.0, // Bottom-right
-        -0.5, -0.5, 0.0, 1.0, // Bottom-left
+        -0.5, -0.5, -0.5, 0.0, 0.0,
+         0.5, -0.5, -0.5, 1.0, 0.0,
+         0.5,  0.5, -0.5, 1.0, 1.0,
+         0.5,  0.5, -0.5, 1.0, 1.0,
+        -0.5,  0.5, -0.5, 0.0, 1.0,
+        -0.5, -0.5, -0.5, 0.0, 0.0,
+
+        -0.5, -0.5,  0.5, 0.0, 0.0,
+         0.5, -0.5,  0.5, 1.0, 0.0,
+         0.5,  0.5,  0.5, 1.0, 1.0,
+         0.5,  0.5,  0.5, 1.0, 1.0,
+        -0.5,  0.5,  0.5, 0.0, 1.0,
+        -0.5, -0.5,  0.5, 0.0, 0.0,
+
+        -0.5,  0.5,  0.5, 1.0, 0.0,
+        -0.5,  0.5, -0.5, 1.0, 1.0,
+        -0.5, -0.5, -0.5, 0.0, 1.0,
+        -0.5, -0.5, -0.5, 0.0, 1.0,
+        -0.5, -0.5,  0.5, 0.0, 0.0,
+        -0.5,  0.5,  0.5, 1.0, 0.0,
+
+         0.5,  0.5,  0.5, 1.0, 0.0,
+         0.5,  0.5, -0.5, 1.0, 1.0,
+         0.5, -0.5, -0.5, 0.0, 1.0,
+         0.5, -0.5, -0.5, 0.0, 1.0,
+         0.5, -0.5,  0.5, 0.0, 0.0,
+         0.5,  0.5,  0.5, 1.0, 0.0,
+
+        -0.5, -0.5, -0.5, 0.0, 1.0,
+         0.5, -0.5, -0.5, 1.0, 1.0,
+         0.5, -0.5,  0.5, 1.0, 0.0,
+         0.5, -0.5,  0.5, 1.0, 0.0,
+        -0.5, -0.5,  0.5, 0.0, 0.0,
+        -0.5, -0.5, -0.5, 0.0, 1.0,
+
+        -0.5,  0.5, -0.5, 0.0, 1.0,
+         0.5,  0.5, -0.5, 1.0, 1.0,
+         0.5,  0.5,  0.5, 1.0, 0.0,
+         0.5,  0.5,  0.5, 1.0, 0.0,
+        -0.5,  0.5,  0.5, 0.0, 0.0,
+        -0.5,  0.5, -0.5, 0.0, 1.0
     ];
 
-    let elements: Vec<GLuint> = vec![
-        0, 1, 2,
-        2, 3, 0
-    ];
+
+    // let vertices: Vec<GLfloat> = vec![
+    //     -0.5,  0.5, 0.0, 0.0, // Top-left
+    //      0.5,  0.5, 1.0, 0.0, // Top-right
+    //      0.5, -0.5, 1.0, 1.0, // Bottom-right
+    //     -0.5, -0.5, 0.0, 1.0, // Bottom-left
+    // ];
+
+    // let elements: Vec<GLuint> = vec![
+    //     0, 1, 2,
+    //     2, 3, 0
+    // ];
 
     // Create the window. Should be using a builder here, but whatever.
     let window = Window::new().unwrap();
@@ -120,7 +165,7 @@ fn main() {
     let program = link_program(vs, fs);
     let mut vao = 0;
     let mut vbo = 0;
-    let mut ebo = 0;
+    // let mut ebo = 0;
     let mut textures = vec![0 as u32; 2];
 
     unsafe {
@@ -134,6 +179,7 @@ fn main() {
         gl::BufferData(
                 gl::ARRAY_BUFFER, float_size!(vertices.len(), GLsizeiptr),
                 vec_to_addr!(vertices), gl::STATIC_DRAW);
+        gl::Enable(gl::DEPTH_TEST);
 
         // Create Texture Object.
         gl::GenTextures(2, textures.get_unchecked_mut(0) as *mut u32);
@@ -182,20 +228,20 @@ fn main() {
         let pos_attr = gl::GetAttribLocation(program, gl_str!("position"));
         gl::EnableVertexAttribArray(pos_attr as GLuint);
         gl::VertexAttribPointer(
-                pos_attr as GLuint, 2, gl::FLOAT, gl::FALSE as GLboolean,
-                float_size!(4, GLsizei), ptr::null());
+                pos_attr as GLuint, 3, gl::FLOAT, gl::FALSE as GLboolean,
+                float_size!(5, GLsizei), ptr::null());
 
         let tex_attr = gl::GetAttribLocation(program, gl_str!("texcoord"));
         gl::EnableVertexAttribArray(tex_attr as GLuint);
         gl::VertexAttribPointer(
                 tex_attr as GLuint, 2, gl::FLOAT, gl::FALSE as GLboolean,
-                float_size!(4, GLsizei), float_size!(2, CVoid));
+                float_size!(5, GLsizei), float_size!(3, CVoid));
 
-        gl::GenBuffers(1, &mut ebo);
-        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-        gl::BufferData(
-                gl::ELEMENT_ARRAY_BUFFER, float_size!(elements.len(), GLsizeiptr),
-                vec_to_addr!(elements), gl::STATIC_DRAW);
+        // gl::GenBuffers(1, &mut ebo);
+        // gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+        // gl::BufferData(
+        //         gl::ELEMENT_ARRAY_BUFFER, float_size!(elements.len(), GLsizeiptr),
+        //         vec_to_addr!(elements), gl::STATIC_DRAW);
 
         gl::Uniform1i(gl::GetUniformLocation(program, gl_str!("brian_tex")), 0);
         gl::Uniform1i(gl::GetUniformLocation(program, gl_str!("samantha_tex")), 1);
@@ -271,11 +317,12 @@ fn main() {
 
         unsafe {
             gl::ClearColor(0.3, 0.3, 0.3, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
+            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
             // Draw a triangle from the 3 vertices
-            gl::DrawElements(
-                gl::TRIANGLES, 6, gl::UNSIGNED_INT, 0 as CVoid);
+            // gl::DrawElements(
+                // gl::TRIANGLES, 6, gl::UNSIGNED_INT, 0 as CVoid);
+            gl::DrawArrays(gl::TRIANGLES, 0, 36);
         }
 
         // We can update and draw here after we handle events and swap buffers.
