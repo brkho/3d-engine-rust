@@ -1,0 +1,151 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1344\cocoasubrtf720
+{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+\margl1440\margr1440\vieww13240\viewh15080\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx3906\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+
+\f0\b\fs28 \cf0 Class Structure:\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+
+\b0\fs24 \cf0 \
+
+\b ModelInfo
+\b0 \
+
+\i Stores information about the model, such as vertices, materials, and normals. This can be created through load_model() or by geometry creating functions like create_box().\
+
+\i0 \
+
+\b ModelInstance
+\i\b0 \
+Takes a ModelInfo and makes a instance of it for use in rendering, giving it relevant render attributes such as position, rotation, and scale.\
+
+\i0\b \
+Camera\
+
+\i\b0 Base class for describing a camera. This holds a position, direction, and aspect ratio. Also includes methods for setting the position and rotation directly. Also, a look_at() function.\
+\
+
+\i0\b PerspectiveCamera
+\i\b0 \
+An implementation of the Camera base class that renders the scene with a perspective projection matrix. This also specifies a FOV.\
+\
+
+\i0\b OrthographicCamera\
+
+\i\b0 An implementation of the Camera base class that renders the scene with an orthographic projection matrix. Probably will not implement this until later.
+\i0 \
+\
+
+\b DirectionalLight\
+
+\i\b0 An implementation of the Light base class that shines from an infinite distance at an angle (such as the sun). Specifies intensity and direction.
+\i0 \
+\
+
+\b PointLight
+\b0 \
+
+\i An implementation of the Light base class that emanates from a fixed point with specified intensity and attenuation.
+\i0 \
+\
+
+\b SpotLight
+\b0 \
+
+\i An implementation of the Light base class that emanates from a fixed point like a PointLight, but has a certain arc as a range (like a flashlight).
+\i0\b \
+\
+GameWindow\
+
+\i\b0 A window for graphics drawing that is managed by the graphics module. This should be a thin wrapper around the glium Window class and will manage draws to the glium window.\
+\
+
+\i0\b Vector3D\
+
+\i\b0 XYZ representation in a 3D coordinate space.\
+\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+
+\i0\b \cf0 Vector4D\
+
+\i\b0 WXYZ representation in a 4D coordinate space.\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0 \
+
+\i0\b Color
+\i\b0 \
+RBGA representation of color with values from 0-255. Provides helper methods to retrieve color in range 0.0-1.0.
+\b \
+
+\i0 \
+
+\fs28 Graphics Module:
+\b0\fs24 \
+\
+
+\b init(width: u32, height: u32, name: &str) -> Result<GameWindow, &str>
+\b0 \
+
+\i Initializes the graphics module with glutin on a certain width, height, and window name. This also compiles the shaders, links the program, binds the VAO and VBO, and specifies shader data location. TODO: add support for vertex array objects.\
+\
+
+\i0\b clear() -> ()\
+
+\i\b0 Clears the screen and then clears the buffers.
+\i0 \
+\
+
+\b swap_buffers() -> ()
+\b0 \
+
+\i Swaps the buffers.
+\i0 \
+\
+
+\b set_camera(camera: Camera) -> ()\
+
+\i\b0 Sets the camera used for rendering.\
+\
+
+\i0\b get_camera() -> Camera\
+
+\i\b0 Gets the camera used for rendering.\
+\
+
+\i0\b add_directional_light(light: DirectionalLight) -> ()
+\b0 \
+
+\i Adds a directional light to the environment.\
+\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+
+\i0\b \cf0 add_spot_light(light: SpotLight) -> ()
+\b0 \
+
+\i Adds a spot light to the environment.\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0 \
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+
+\i0\b \cf0 add_point_light(light: PointLight) -> ()
+\b0 \
+
+\i Adds a point light to the environment.\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0 \
+
+\i0\b remove_light(light: Light) -> ()\
+
+\i\b0 Removes a light from the environment.\
+\
+
+\i0\b get_lights() -> Vec<Light>\
+
+\i\b0 Gets a vector of lights in the environment.\
+\
+
+\i0\b draw_instance(model: ModelInstance) -> ()\
+
+\i\b0 Draws a ModelInstance to the screen. The user will not see the results until the buffer is swapped, of course.\
+}
