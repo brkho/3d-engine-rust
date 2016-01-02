@@ -41,14 +41,45 @@ pub struct Color {
     pub a: u8,
 }
 
+impl Color {
+    // Default constructor for RGBA Color structs.
+    pub fn new(red: u8, green: u8, blue: u8, alpha: u8) -> Color {
+        Color { r: red, g: green, b: blue, a: alpha }
+    }
+
+    // Alternative constructor for RGB Color structs with alpha set to 255.
+    pub fn new_rgb(red: u8, green: u8, blue: u8) -> Color {
+        Color { r: red, g: green, b: blue, a: 255 }
+    }
+}
+
 // Currently unimplemented because I do not have a way of loading in COLLADA/fbx files.
 pub struct Material { pub id: u8 }
+
+impl Material {
+    // Default constructor to be implemented later.
+    pub fn new() -> Material {
+        Material { id: 0 }
+    }
+}
 
 // Stores information about the model which can be instantiated to create a ModelInstance. 
 pub struct ModelInfo {
     pub vertices: Vec<GLfloat>,
     pub color: Color,
     pub mat: Material,
+}
+
+impl ModelInfo {
+    // Default constructor with color initialized to <255, 255, 255, 255>.
+    pub fn new(vertices: Vec<GLfloat>, mat: Material) -> ModelInfo {
+        ModelInfo { vertices: vertices, color: Color::new_rgb(255, 255, 255), mat: mat }
+    }
+
+    // Constructor to create a ModelInfo with a Color.
+    pub fn new_with_color(vertices: Vec<GLfloat>, color: Color, mat: Material) -> ModelInfo {
+        ModelInfo { vertices: vertices, color: color, mat: mat }
+    }
 }
 
 // An instantiazation of a ModelInfo that represents a model in-game. This has a variety of
@@ -58,6 +89,16 @@ pub struct ModelInstance {
     pub pos: Vector3D,
     pub scale: Vector3D,
     pub rot: Vector4D,
+}
+
+impl ModelInstance {
+    // Create an instance from a reference counted pointer to a ModelInfo struct.
+    pub fn from(info: Rc<ModelInfo>) -> ModelInstance {
+        let pos = Vector3D::new(0.0, 0.0, 0.0);
+        let scale = Vector3D::new(0.0, 0.0, 0.0);
+        let rot = Vector4D::new(0.0, 0.0, 0.0, 0.0);
+        ModelInstance { info: info, pos: pos, scale: scale, rot: rot }
+    }
 }
 
 // Specifies two methods for getting the view and projection matrices.
@@ -92,7 +133,15 @@ impl Camera for PerspectiveCamera {
 // Implementation of PerspectiveCamera methods.
 impl PerspectiveCamera {
     // Constructor to initialize the fields and set up the Projection matrix.
-    pub fn new(pos: Vector3D, target: Vector3D, up: Vector3D, aspect: f32,
+    pub fn new(pos: Vector3D, target: Vector3D, aspect: f32, fov: f32,
+            near: f32, far: f32) -> PerspectiveCamera {
+        let up = Vector3D::new(0.0, 0.0, 1.0);
+        PerspectiveCamera::new_with_up(pos, target, up, aspect, fov, near, far)
+    }
+
+    // Constructor to initialize the fields and set up the Projection matrix with a specified up
+    // vector.
+    pub fn new_with_up(pos: Vector3D, target: Vector3D, up: Vector3D, aspect: f32,
             fov: f32, near: f32, far: f32) -> PerspectiveCamera {
         let proj = PerspectiveFov {
                 fovy: Rad::from(deg(fov)),
@@ -115,10 +164,27 @@ pub struct PointLight {
     pub quad_attn: f32,
 }
 
+impl PointLight {
+    // Default constructor for a PointLight.
+    pub fn new(intensity: Color, position: Vector3D, const_attn: f32, linear_attn: f32,
+            quad_attn: f32) -> PointLight {
+        PointLight {
+                intensity: intensity, position: position, const_attn: const_attn,
+                linear_attn: linear_attn, quad_attn: quad_attn }
+    }
+}
+
 // Light source that shines from an infinite distance from a direction (such as the sun).
 pub struct DirectionalLight {
     pub intensity: Color,
     pub direction: Vector3D,
+}
+
+impl DirectionalLight {
+    // Default constructor for a DirectionalLight.
+    pub fn new(intensity: Color, direction: Vector3D) -> DirectionalLight {
+        DirectionalLight { intensity: intensity, direction: direction }
+    }
 }
 
 // Light source that emanates from a fixed point like a PointLight, but has a certain arc and
@@ -134,8 +200,19 @@ pub struct SpotLight {
     pub dropoff: f32,
 }
 
+impl SpotLight {
+    // Default constructor for a SpotLight.
+    pub fn new(intensity: Color, position: Vector3D, direction: Vector3D, const_attn: f32,
+            linear_attn: f32, quad_attn: f32, cutoff: f32, dropoff: f32) -> SpotLight {
+        SpotLight {
+                intensity: intensity, position: position, const_attn: const_attn,
+                direction: direction, linear_attn: linear_attn, quad_attn: quad_attn,
+                cutoff: cutoff, dropoff: dropoff }
+    }
+}
+
 // A window for graphics drawing that is managed by the graphics module. This is a thin wrapper
-// around the glium Window class and will manage draws to the glium window.
+// around the glutin Window class and will manage draws to the glutin window.
 pub struct GameWindow {
     pub width: u32,
     pub height: u32,
@@ -146,6 +223,12 @@ pub struct GameWindow {
     directional_lights: Vec<DirectionalLight>,
     spot_lights: Vec<SpotLight>,
 }
+
+// impl GameWindow {
+//     pub fn new(width: u32, height: u32, title: String) -> Result<GameWindow, String> {
+//         let bg_color = Color::new(0, 0, 0);
+//     }
+// }
 
 fn main() {
     println!("Hello, world!");
