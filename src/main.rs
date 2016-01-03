@@ -13,20 +13,14 @@ extern crate glutin;
 extern crate gl;
 // extern crate time;
 
-// use glutin::{Event, Window};
-
 use cgmath::*;
 use gl::types::*;
 use glutin::{Window, Event};
 use std::mem;
 use std::ptr;
-// use std::str;
 use std::ffi::CString;
-// use std::fs::File;
-// use std::io::Read;
 use std::process;
 use mmo::util::shader;
-
 use std::rc::Rc;
 
 // Redeclaration of the constant void pointer type for ease of use.
@@ -179,27 +173,10 @@ pub struct PointLight {
     pub quad_attn: f32,
 }
 
-impl PointLight {
-    // Default constructor for a PointLight.
-    pub fn new(intensity: Color, position: Vector3D, const_attn: f32, linear_attn: f32,
-            quad_attn: f32) -> PointLight {
-        PointLight {
-                intensity: intensity, position: position, const_attn: const_attn,
-                linear_attn: linear_attn, quad_attn: quad_attn }
-    }
-}
-
 // Light source that shines from an infinite distance from a direction (such as the sun).
 pub struct DirectionalLight {
     pub intensity: Color,
     pub direction: Vector3D,
-}
-
-impl DirectionalLight {
-    // Default constructor for a DirectionalLight.
-    pub fn new(intensity: Color, direction: Vector3D) -> DirectionalLight {
-        DirectionalLight { intensity: intensity, direction: direction }
-    }
 }
 
 // Light source that emanates from a fixed point like a PointLight, but has a certain arc and
@@ -215,26 +192,15 @@ pub struct SpotLight {
     pub dropoff: f32,
 }
 
-impl SpotLight {
-    // Default constructor for a SpotLight.
-    pub fn new(intensity: Color, position: Vector3D, direction: Vector3D, const_attn: f32,
-            linear_attn: f32, quad_attn: f32, cutoff: f32, dropoff: f32) -> SpotLight {
-        SpotLight {
-                intensity: intensity, position: position, const_attn: const_attn,
-                direction: direction, linear_attn: linear_attn, quad_attn: quad_attn,
-                cutoff: cutoff, dropoff: dropoff }
-    }
-}
-
 // A window for graphics drawing that is managed by the graphics module. This is a thin wrapper
 // around the glutin Window class and will manage draws to the glutin window.
 pub struct GameWindow {
     pub bg_color: Color,
     pub camera: Option<Box<Camera>>,
     gl_window: Window,
-    point_lights: Vec<PointLight>,
-    directional_lights: Vec<DirectionalLight>,
-    spot_lights: Vec<SpotLight>,
+    point_lights: Vec<Option<PointLight>>,
+    directional_lights: Vec<Option<DirectionalLight>>,
+    spot_lights: Vec<Option<SpotLight>>,
     vao: GLuint,
     vbo: GLuint,
     program: GLuint,
@@ -245,9 +211,9 @@ impl GameWindow {
     // creation can fail suchas unsupported OpenGL, so it returns a Result.
     pub fn new(width: u32, height: u32, title: String) -> Result<GameWindow, String> {
         let bg_color = Color::new_rgb(0.0, 0.0, 0.0);
-        let pl: Vec<PointLight> = Vec::new();
-        let dl: Vec<DirectionalLight> = Vec::new();
-        let sl: Vec<SpotLight> = Vec::new();
+        let pl: Vec<Option<PointLight>> = Vec::new();
+        let dl: Vec<Option<DirectionalLight>> = Vec::new();
+        let sl: Vec<Option<SpotLight>> = Vec::new();
 
         // TODO: Handle the actual error reporting of glutin and make this code less ugly.
         let creation_err = "Unable to create GameWindow.";
@@ -291,6 +257,89 @@ impl GameWindow {
         window.clear();
         window.swap_buffers();
         Ok(window)
+    }
+
+    // Constructs and adds a PointLight to the scene. This then returns an u16 handle (internally
+    // representing the index in the array) that can be used with the getter to modify light attrs.
+    pub fn add_point_light(&mut self, intensity: Color, position: Vector3D, const_attn: f32,
+            linear_attn: f32, quad_attn: f32) -> usize {
+        let light = PointLight {
+                intensity: intensity, position: position, const_attn: const_attn,
+                linear_attn: linear_attn, quad_attn: quad_attn };
+        GameWindow::add_light(light, &mut self.point_lights)
+    }
+
+    // Removes a PointLight from the scene given its handle.
+    pub fn remove_point_light(&mut self, index: usize) {
+        self.point_lights[index] = None;
+    }
+
+    // Gets a reference to a PointLight given its handle.
+    pub fn get_point_light(&mut self, index: usize) -> &mut PointLight {
+        (&mut self.point_lights[index]).as_mut().unwrap()
+    }
+
+    // Constructs and adds a DirectionalLight to the scene. This then returns an u16 handle
+    // (internally representing the index in the array) that can be used with the getter to modify
+    // light attrs.
+    pub fn add_directional_light(&mut self, intensity: Color, direction: Vector3D) -> usize {
+        let light = DirectionalLight { intensity: intensity, direction: direction };
+        GameWindow::add_light(light, &mut self.directional_lights)
+    }
+
+    // Removes a DirectionalLight from the scene given its handle.
+    pub fn remove_directional_light(&mut self, index: usize) {
+        self.directional_lights[index] = None;
+    }
+
+    // Gets a reference to a DirectionalLight given its handle.
+    pub fn get_directional_light(&mut self, index: usize) -> &mut DirectionalLight {
+        (&mut self.directional_lights[index]).as_mut().unwrap()
+    }
+
+    // Constructs and adds a SpotLight to the scene. This then returns an u16 handle (internally
+    // representing the index in the array) that can be used with the getter to modify light attrs.
+    pub fn add_spot_light(&mut self, intensity: Color, position: Vector3D, direction: Vector3D,
+            const_attn: f32, linear_attn: f32, quad_attn: f32, cutoff: f32,
+            dropoff: f32) -> usize {
+        let light = SpotLight {
+                intensity: intensity, position: position, const_attn: const_attn,
+                direction: direction, linear_attn: linear_attn, quad_attn: quad_attn,
+                cutoff: cutoff, dropoff: dropoff };
+        GameWindow::add_light(light, &mut self.spot_lights)
+    }
+
+    // Removes a SpotLight from the scene given its handle.
+    pub fn remove_spot_light(&mut self, index: usize) {
+        self.spot_lights[index] = None;
+    }
+
+    // Gets a reference to a SpotLight given its handle.
+    pub fn get_spot_light(&mut self, index: usize) -> &mut SpotLight {
+        (&mut self.spot_lights[index]).as_mut().unwrap()
+    }
+
+    // Helper function that adds a light to a specified vector of lights. This keeps track of
+    // "holes" in the array and returns a handle to the first unused location in the array. If
+    // there are no holes, then it adds the light to the end and returns the corresponding handle.
+    fn add_light<T>(light: T, vector: &mut Vec<Option<T>>) -> usize {
+        let mut index = None;
+        for (i, elem) in vector.iter().enumerate() {
+            match elem {
+                &None => { index = Some(i); },
+                &Some(_) => (),
+            }
+        }
+        match index {
+            None => {
+                vector.push(Some(light));
+                vector.len() - 1
+            }
+            Some(i) => {
+                vector[i] = Some(light);
+                i
+            }
+        }
     }
 
     // Sets the size of the window.
