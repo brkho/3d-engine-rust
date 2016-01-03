@@ -13,22 +13,23 @@ extern crate glutin;
 extern crate gl;
 // extern crate time;
 
-use cgmath::*;
+use cgmath::Point;
+use cgmath::Matrix;
 use gl::types::*;
 use glutin::{Window, Event};
-use std::mem;
-use std::ptr;
-use std::ffi::CString;
-use std::process;
 use mmo::util::shader;
+use std::ffi::CString;
+use std::mem;
+use std::process;
+use std::ptr;
 use std::rc::Rc;
 
 // Redeclaration of the constant void pointer type for ease of use.
 type CVoid = *const std::os::raw::c_void;
 
 // Aliasing of cgmath types for uniformity in the game engine.
-pub type Vector3D = Vector3<GLfloat>;
-pub type Vector4D = Vector4<GLfloat>;
+pub type Vector3D = cgmath::Vector3<GLfloat>;
+pub type Quaternion = cgmath::Quaternion<GLfloat>;
 
 // Represents a color in RGBA with intensity values from 0.0 to 1.0.
 pub struct Color {
@@ -89,6 +90,54 @@ impl ModelInfo {
     pub fn new_with_color(vertices: Vec<GLfloat>, color: Color, mat: Material) -> ModelInfo {
         ModelInfo { vertices: vertices, color: color, mat: mat }
     }
+
+    // Creates a box with specified size and color.
+    pub fn new_box(scale_x: f32, scale_y: f32, scale_z: f32, color: Color) -> ModelInfo {
+        let vertices: Vec<GLfloat> = vec![
+            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+             0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+             0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+             0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+            -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+
+            -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+             0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+            -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+            -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+
+            -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+            -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+            -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+            -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+
+             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+             0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+             0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+             0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+             0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+
+            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+             0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+             0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+             0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+            -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+
+            -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+             0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+            -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+            -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z
+        ];
+        ModelInfo::new_with_color(vertices, color, Material::new())
+    }
 }
 
 // An instantiazation of a ModelInfo that represents a model in-game. This has a variety of
@@ -96,24 +145,24 @@ impl ModelInfo {
 pub struct ModelInstance {
     pub info: Rc<ModelInfo>,
     pub pos: Vector3D,
-    pub scale: Vector3D,
-    pub rot: Vector4D,
+    pub rot: Quaternion,
+    pub scale: f32,
 }
 
 impl ModelInstance {
     // Create an instance from a reference counted pointer to a ModelInfo struct.
     pub fn from(info: Rc<ModelInfo>) -> ModelInstance {
         let pos = Vector3D::new(0.0, 0.0, 0.0);
-        let scale = Vector3D::new(0.0, 0.0, 0.0);
-        let rot = Vector4D::new(0.0, 0.0, 0.0, 0.0);
+        let rot = Quaternion::new(1.0, 0.0, 0.0, 0.0);
+        let scale = 1.0;
         ModelInstance { info: info, pos: pos, scale: scale, rot: rot }
     }
 }
 
 // Specifies two methods for getting the view and projection matrices.
 pub trait Camera {
-    fn get_view_matrix(&self) -> Matrix4<GLfloat>;
-    fn get_projection_matrix(&self) -> Matrix4<GLfloat>;
+    fn get_view_matrix(&self) -> cgmath::Matrix4<GLfloat>;
+    fn get_projection_matrix(&self) -> cgmath::Matrix4<GLfloat>;
 }
 
 // A representation of a camera with a perspective projection. This implements the Camera trait, so
@@ -121,22 +170,22 @@ pub trait Camera {
 pub struct PerspectiveCamera {
     pub pos: Vector3D,
     pub target: Vector3D,
-    proj: Matrix4<GLfloat>,
+    proj: cgmath::Matrix4<GLfloat>,
     up: Vector3D,
 }
 
 // Implementation of the Camera methods for PerspectiveCamera.
 impl Camera for PerspectiveCamera {
     // Calculate the view matrix from the PerspectiveCamera's position and target.
-    fn get_view_matrix(&self) -> Matrix4<GLfloat> {
-        Matrix4::look_at(
-                Point3::from_vec(self.pos),
-                Point3::from_vec(self.target),
+    fn get_view_matrix(&self) -> cgmath::Matrix4<GLfloat> {
+        cgmath::Matrix4::look_at(
+                cgmath::Point3::from_vec(self.pos),
+                cgmath::Point3::from_vec(self.target),
                 self.up)
     }
 
     // Since we precompute the projection, we can just return it here.
-    fn get_projection_matrix(&self) -> Matrix4<GLfloat> { self.proj }
+    fn get_projection_matrix(&self) -> cgmath::Matrix4<GLfloat> { self.proj }
 }
 
 // Implementation of PerspectiveCamera methods.
@@ -152,12 +201,12 @@ impl PerspectiveCamera {
     // vector.
     pub fn new_with_up(pos: Vector3D, target: Vector3D, up: Vector3D, aspect: f32,
             fov: f32, near: f32, far: f32) -> PerspectiveCamera {
-        let proj = PerspectiveFov {
-                fovy: Rad::from(deg(fov)),
+        let proj = cgmath::PerspectiveFov {
+                fovy: cgmath::Rad::from(cgmath::deg(fov)),
                 aspect: aspect,
                 near: near,
                 far: far };
-        PerspectiveCamera { pos: pos, target: target, up: up, proj: Matrix4::from(proj) }
+        PerspectiveCamera { pos: pos, target: target, up: up, proj: cgmath::Matrix4::from(proj) }
     }
 }
 
@@ -257,6 +306,15 @@ impl GameWindow {
         window.clear();
         window.swap_buffers();
         Ok(window)
+    }
+
+    // Adds a Camera, setting the value to Some(camera).
+    pub fn attach_camera(&mut self, camera: Box<Camera>) {
+        self.camera = Some(camera);
+    }
+
+    pub fn get_camera(&mut self) -> &mut Box<Camera> {
+        self.camera.as_mut().unwrap()
     }
 
     // Constructs and adds a PointLight to the scene. This then returns an u16 handle (internally
@@ -364,13 +422,82 @@ impl GameWindow {
     pub fn swap_buffers(&self) {
         self.gl_window.swap_buffers().unwrap();
     }
+
+    // Gets the size of the window in pixels. Again, just a poorly named wrapper. Sorry tomaka. :(
+    pub fn get_size(&self) -> (u32, u32) {
+        self.gl_window.get_inner_size_pixels().unwrap()
+    }
+
+    // Gets the aspect ratio of the window.
+    pub fn get_aspect_ratio(&self) -> f32 {
+        let (width, height) = self.get_size();
+        (width as f32) / (height as f32)
+    }
+
+    // Draw a ModelInstance to the window using the camera, position, vertices, and materials.
+    // TODO: We are currently doing some immediate mode-esque rendering by discarding the VBO every
+    // draw. This is pretty bad and is going to be a bottleneck. Look into having the GameWindow
+    // manage the VBO data.
+    // The current plan is to:
+    // 1. add VBO, start, size, and generation fields to ModelInfo
+    // 2. allocate 65535 sized VBOs on draw_instance. If (start, size) is None, then allocate.
+    // 3. if there is no more room, make new VBO (and if size is > 65535, allocate for that size).
+    // 4. add a generation int and increment it on clear_vertex_buffers(). generation must be the
+    //    same when draw_instance() or else must remap.
+    pub fn draw_instance(&self, instance: &ModelInstance) {
+        let camera = match self.camera {
+            None => { return; },
+            Some(ref c) => c,
+        };
+        let model = cgmath::Matrix4::from(cgmath::Decomposed {
+                scale: instance.scale, rot: instance.rot, disp: instance.pos });
+        let view = camera.get_view_matrix();
+        let proj = camera.get_projection_matrix();
+        let mut transform = proj * view * model;
+
+        unsafe {
+            let mut vertices: Vec<GLfloat> = Vec::new();
+            for x in 0..instance.info.vertices.len() {
+                if x % 3 != 0 {
+                    continue;
+                }
+                vertices.push(instance.info.vertices[x]);
+                vertices.push(instance.info.vertices[x + 1]);
+                vertices.push(instance.info.vertices[x + 2]);
+                vertices.push(instance.info.color.r);
+                vertices.push(instance.info.color.g);
+                vertices.push(instance.info.color.b);
+                vertices.push(instance.info.color.a);
+            }
+            gl::BufferData(
+                gl::ARRAY_BUFFER, float_size!(vertices.len(), GLsizeiptr),
+                vec_to_addr!(vertices), gl::STATIC_DRAW);
+            gl::UniformMatrix4fv(
+                    gl::GetUniformLocation(self.program, gl_str!("transform")), 1,
+                    gl::FALSE as GLboolean, transform.as_mut_ptr());
+            gl::DrawArrays(gl::TRIANGLES, 0, 36);
+        }
+    }
 }
 
 // Driver test program.
 fn main() {
-    let window = GameWindow::new(1024, 768, "Test Window".to_string()).unwrap();
+    let mut window = GameWindow::new(800, 600, "Test Window".to_string()).unwrap();
+    let mut camera = PerspectiveCamera::new(
+            Vector3D::new(1.2, 1.2, 1.2), Vector3D::new(0.0, 0.0, 0.0), window.get_aspect_ratio(),
+            45.0, 1.0, 100.0);
+    camera.pos = Vector3D::new(15.0, 15.0, 15.0);
+    window.attach_camera(Box::new(camera));
+    let box_info = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
+    let box_instance = ModelInstance::from(box_info.clone());
 
     loop {
+        window.clear();
+        window.draw_instance(&box_instance);
+        window.swap_buffers();
+
+        
+
         for event in window.poll_events() {
             match event {
                 Event::Closed => process::exit(0),

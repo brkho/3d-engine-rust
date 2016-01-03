@@ -5,11 +5,9 @@ in vec4 color;
 
 out vec4 Color;
 
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 proj;
+uniform mat4 transform;
 
 void main() {
     Color = color;
-    gl_Position = proj * view * model * vec4(position.x, position.y, position.z, 1.0);
+    gl_Position = transform * vec4(position.x, position.y, position.z, 1.0);
 }
