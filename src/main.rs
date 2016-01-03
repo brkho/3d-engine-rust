@@ -5,12 +5,11 @@
 //
 // Brian Ho
 // brian@brkho.com
-// December 2015
 
-// #[macro_use]
-// extern crate mmo;
+#[macro_use]
+extern crate mmo;
 extern crate cgmath;
-// extern crate glutin;
+extern crate glutin;
 extern crate gl;
 // extern crate time;
 
@@ -18,38 +17,54 @@ extern crate gl;
 
 use cgmath::*;
 use gl::types::*;
-// use std::mem;
-// use std::ptr;
+use glutin::{Window, Event};
+use std::mem;
+use std::ptr;
 // use std::str;
-// use std::ffi::CString;
+use std::ffi::CString;
 // use std::fs::File;
 // use std::io::Read;
-// use std::process;
-// use mmo::util::bmp;
+use std::process;
+use mmo::util::shader;
 
 use std::rc::Rc;
+
+// Redeclaration of the constant void pointer type for ease of use.
+type CVoid = *const std::os::raw::c_void;
 
 // Aliasing of cgmath types for uniformity in the game engine.
 pub type Vector3D = Vector3<GLfloat>;
 pub type Vector4D = Vector4<GLfloat>;
 
-// Represents a color in RGBA with intensity values from 0 to 255.
+// Represents a color in RGBA with intensity values from 0.0 to 1.0.
 pub struct Color {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: u8,
+    pub r: GLfloat,
+    pub g: GLfloat,
+    pub b: GLfloat,
+    pub a: GLfloat,
 }
 
 impl Color {
     // Default constructor for RGBA Color structs.
-    pub fn new(red: u8, green: u8, blue: u8, alpha: u8) -> Color {
+    pub fn new(red: f32, green: f32, blue: f32, alpha: f32) -> Color {
         Color { r: red, g: green, b: blue, a: alpha }
     }
 
+    // Alternative constructor for RGB Color structs with alpha set to 1.0.
+    pub fn new_rgb(red: f32, green: f32, blue: f32) -> Color {
+        Color { r: red, g: green, b: blue, a: 1.0 }
+    }
+
+    // Default constructor for RGBA Color structs for range 0-255.
+    pub fn new_u8(red: u8, green: u8, blue: u8, alpha: u8) -> Color {
+        Color {
+                r: red as f32 / 255.0, g: green as f32 / 255.0,
+                b: blue as f32 / 255.0, a: alpha as f32 / 255.0 }
+    }
+
     // Alternative constructor for RGB Color structs with alpha set to 255.
-    pub fn new_rgb(red: u8, green: u8, blue: u8) -> Color {
-        Color { r: red, g: green, b: blue, a: 255 }
+    pub fn new_rgb_u8(red: u8, green: u8, blue: u8) -> Color {
+        Color { r: red as f32 / 255.0, g: green as f32 / 255.0, b: blue as f32 / 255.0, a: 1.0 }
     }
 }
 
@@ -71,9 +86,9 @@ pub struct ModelInfo {
 }
 
 impl ModelInfo {
-    // Default constructor with color initialized to <255, 255, 255, 255>.
+    // Default constructor with color initialized to <1.0, 1.0, 1.0, 1.0>.
     pub fn new(vertices: Vec<GLfloat>, mat: Material) -> ModelInfo {
-        ModelInfo { vertices: vertices, color: Color::new_rgb(255, 255, 255), mat: mat }
+        ModelInfo { vertices: vertices, color: Color::new_rgb(1.0, 1.0, 1.0), mat: mat }
     }
 
     // Constructor to create a ModelInfo with a Color.
@@ -214,22 +229,104 @@ impl SpotLight {
 // A window for graphics drawing that is managed by the graphics module. This is a thin wrapper
 // around the glutin Window class and will manage draws to the glutin window.
 pub struct GameWindow {
-    pub width: u32,
-    pub height: u32,
-    pub title: String,
     pub bg_color: Color,
     pub camera: Option<Box<Camera>>,
+    gl_window: Window,
     point_lights: Vec<PointLight>,
     directional_lights: Vec<DirectionalLight>,
     spot_lights: Vec<SpotLight>,
+    vao: GLuint,
+    vbo: GLuint,
+    program: GLuint,
 }
 
-// impl GameWindow {
-//     pub fn new(width: u32, height: u32, title: String) -> Result<GameWindow, String> {
-//         let bg_color = Color::new(0, 0, 0);
-//     }
-// }
+impl GameWindow {
+    // Initializes a GameWindow with a black background and no camera. Note that the GameWindow
+    // creation can fail suchas unsupported OpenGL, so it returns a Result.
+    pub fn new(width: u32, height: u32, title: String) -> Result<GameWindow, String> {
+        let bg_color = Color::new_rgb(0.0, 0.0, 0.0);
+        let pl: Vec<PointLight> = Vec::new();
+        let dl: Vec<DirectionalLight> = Vec::new();
+        let sl: Vec<SpotLight> = Vec::new();
 
+        // TODO: Handle the actual error reporting of glutin and make this code less ugly.
+        let creation_err = "Unable to create GameWindow.";
+        let gl_window = try!(Window::new().map_err(|_| creation_err.to_string()));
+        unsafe { try!(gl_window.make_current().map_err(|_| creation_err.to_string())) }
+        gl_window.set_title(&title);
+        gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
+
+        let mut window = GameWindow {
+                bg_color: bg_color, camera: None, gl_window: gl_window, vao: 0, vbo: 0,
+                program: 0, point_lights: pl, directional_lights: dl, spot_lights: sl };
+        // Begin unsafe OpenGL shenanigans. Here, we compile and link the shaders, set up the VAO
+        // and VBO, and specify the layout of the vertex data.
+        unsafe {
+            let vs = shader::compile_shader("std.vert", gl::VERTEX_SHADER);
+            let fs = shader::compile_shader("std.frag", gl::FRAGMENT_SHADER);
+            window.program = shader::link_program(vs, fs);
+
+            gl::GenVertexArrays(1, &mut window.vao);
+            gl::BindVertexArray(window.vao);
+            gl::GenBuffers(1, &mut window.vbo);
+            gl::BindBuffer(gl::ARRAY_BUFFER, window.vbo);
+            gl::Enable(gl::DEPTH_TEST);
+
+            gl::UseProgram(window.program);
+            gl::BindFragDataLocation(window.program, 0, gl_str!("out_color"));
+
+            let pos_attr = gl::GetAttribLocation(window.program, gl_str!("position"));
+            gl::EnableVertexAttribArray(pos_attr as GLuint);
+            gl::VertexAttribPointer(
+                    pos_attr as GLuint, 3, gl::FLOAT, gl::FALSE as GLboolean,
+                    float_size!(7, GLsizei), ptr::null());
+            let color_attr = gl::GetAttribLocation(window.program, gl_str!("color"));
+            gl::EnableVertexAttribArray(color_attr as GLuint);
+            gl::VertexAttribPointer(
+                    color_attr as GLuint, 4, gl::FLOAT, gl::FALSE as GLboolean,
+                    float_size!(7, GLsizei), float_size!(3, CVoid));
+        }
+
+        window.set_size(width, height);
+        window.clear();
+        window.swap_buffers();
+        Ok(window)
+    }
+
+    // Sets the size of the window.
+    pub fn set_size(&self, width: u32, height: u32) {
+        self.gl_window.set_inner_size(width, height);
+    }
+
+    // Gets the gl_window.
+    pub fn poll_events(&self) -> glutin::PollEventsIterator {
+        self.gl_window.poll_events()
+    }
+
+    // Clears the screen and buffers.
+    pub fn clear(&self) {
+        unsafe {
+            gl::ClearColor(self.bg_color.r, self.bg_color.g, self.bg_color.b, self.bg_color.a);
+            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        }
+    }
+
+    // Swaps the buffers.
+    pub fn swap_buffers(&self) {
+        self.gl_window.swap_buffers().unwrap();
+    }
+}
+
+// Driver test program.
 fn main() {
-    println!("Hello, world!");
+    let window = GameWindow::new(1024, 768, "Test Window".to_string()).unwrap();
+
+    loop {
+        for event in window.poll_events() {
+            match event {
+                Event::Closed => process::exit(0),
+                _ => ()
+            }
+        }
+    }
 }

@@ -4,7 +4,6 @@
 //
 // Brian Ho
 // brian@brkho.com
-// December 2015
 
 
 #[macro_export]

@@ -1,15 +1,15 @@
 #version 150
 
 in vec3 position;
-in vec2 texcoord;
+in vec4 color;
 
-out vec2 Texcoord;
+out vec4 Color;
 
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 proj;
 
 void main() {
-    Texcoord = texcoord;
+    Color = color;
     gl_Position = proj * view * model * vec4(position.x, position.y, position.z, 1.0);
 }

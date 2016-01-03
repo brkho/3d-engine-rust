@@ -5,7 +5,6 @@
 //
 // Brian Ho
 // brian@brkho.com
-// December 2015
 
 #[macro_use]
 extern crate mmo;
