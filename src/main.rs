@@ -11,12 +11,13 @@ extern crate mmo;
 extern crate cgmath;
 extern crate glutin;
 extern crate gl;
-// extern crate time;
+extern crate time;
 
 use cgmath::Point;
 use cgmath::Matrix;
+use cgmath::EuclideanVector;
 use gl::types::*;
-use glutin::{Window, Event};
+use glutin::{Window, Event, VirtualKeyCode, ElementState};
 use mmo::util::shader;
 use std::ffi::CString;
 use std::mem;
@@ -163,6 +164,8 @@ impl ModelInstance {
 pub trait Camera {
     fn get_view_matrix(&self) -> cgmath::Matrix4<GLfloat>;
     fn get_projection_matrix(&self) -> cgmath::Matrix4<GLfloat>;
+    fn get_fwd(&self) -> Vector3D;
+    fn get_right(&self) -> Vector3D;
 }
 
 // A representation of a camera with a perspective projection. This implements the Camera trait, so
@@ -182,6 +185,18 @@ impl Camera for PerspectiveCamera {
                 cgmath::Point3::from_vec(self.pos),
                 cgmath::Point3::from_vec(self.target),
                 self.up)
+    }
+
+    // Gets the forward vector from the view matrix.
+    fn get_fwd(&self) -> Vector3D {
+        let mat = self.get_view_matrix();
+        Vector3D::new(mat.x[2], mat.y[2], mat.z[2])
+    }
+
+    // Gets the right vector from the view matrix.
+    fn get_right(&self) -> Vector3D {
+        let mat = self.get_view_matrix();
+        Vector3D::new(mat.x[0], mat.y[0], mat.z[0])
     }
 
     // Since we precompute the projection, we can just return it here.
@@ -245,7 +260,7 @@ pub struct SpotLight {
 // around the glutin Window class and will manage draws to the glutin window.
 pub struct GameWindow {
     pub bg_color: Color,
-    pub camera: Option<Box<Camera>>,
+    pub camera: Option<PerspectiveCamera>,
     gl_window: Window,
     point_lights: Vec<Option<PointLight>>,
     directional_lights: Vec<Option<DirectionalLight>>,
@@ -309,11 +324,11 @@ impl GameWindow {
     }
 
     // Adds a Camera, setting the value to Some(camera).
-    pub fn attach_camera(&mut self, camera: Box<Camera>) {
+    pub fn attach_camera(&mut self, camera: PerspectiveCamera) {
         self.camera = Some(camera);
     }
 
-    pub fn get_camera(&mut self) -> &mut Box<Camera> {
+    pub fn get_camera(&mut self) -> &mut PerspectiveCamera {
         self.camera.as_mut().unwrap()
     }
 
@@ -434,7 +449,7 @@ impl GameWindow {
         (width as f32) / (height as f32)
     }
 
-    // Draw a ModelInstance to the window using the camera, position, vertices, and materials.
+    // Draw a ModelInstance to the window using a camera, position, vertices, and materials.
     // TODO: We are currently doing some immediate mode-esque rendering by discarding the VBO every
     // draw. This is pretty bad and is going to be a bottleneck. Look into having the GameWindow
     // manage the VBO data.
@@ -482,24 +497,84 @@ impl GameWindow {
 
 // Driver test program.
 fn main() {
-    let mut window = GameWindow::new(800, 600, "Test Window".to_string()).unwrap();
-    let mut camera = PerspectiveCamera::new(
-            Vector3D::new(1.2, 1.2, 1.2), Vector3D::new(0.0, 0.0, 0.0), window.get_aspect_ratio(),
+    let mut window = GameWindow::new(800, 600, "Engine Test".to_string()).unwrap();
+    let camera = PerspectiveCamera::new(
+            Vector3D::new(7.0, 7.0, 7.0), Vector3D::new(0.0, 0.0, 0.0), window.get_aspect_ratio(),
             45.0, 1.0, 100.0);
-    camera.pos = Vector3D::new(15.0, 15.0, 15.0);
-    window.attach_camera(Box::new(camera));
-    let box_info = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
-    let box_instance = ModelInstance::from(box_info.clone());
+    window.attach_camera(camera);
+    let rb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
+    let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
+    let yb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 1.0, 0.0)));
+    let gb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 1.0, 0.0)));
+    let bb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 1.0)));
+    let mut boxes = Vec::new();
+    for i in 0..5 {
+        boxes.push(ModelInstance::from(rb.clone()));
+        boxes.last_mut().unwrap().pos = Vector3D::new(0.0, i as f32 * 1.5, 0.0);
+        boxes.push(ModelInstance::from(ob.clone()));
+        boxes.last_mut().unwrap().pos = Vector3D::new(1.5, i as f32 * 1.5, 0.0);
+        boxes.push(ModelInstance::from(yb.clone()));
+        boxes.last_mut().unwrap().pos = Vector3D::new(3.0, i as f32 * 1.5, 0.0);
+        boxes.push(ModelInstance::from(gb.clone()));
+        boxes.last_mut().unwrap().pos = Vector3D::new(4.5, i as f32 * 1.5, 0.0);
+        boxes.push(ModelInstance::from(bb.clone()));
+        boxes.last_mut().unwrap().pos = Vector3D::new(6.0, i as f32 * 1.5, 0.0);
+    }
+    // let mut box_instance = ModelInstance::from(box_info.clone());
 
+    let mut left_pressed = 0;
+    let mut right_pressed = 0;
+    let mut up_pressed = 0;
+    let mut down_pressed = 0;
+    let mut last_time = time::now().to_timespec();
+    let mut elapsed_time = 0.0;
     loop {
+        let curr_time = time::now().to_timespec();
+        let elapsed_msec = (curr_time - last_time).num_microseconds().unwrap();
+        let dt = elapsed_msec as f32 / 1000000.0;
+        elapsed_time += dt;
+        last_time = curr_time;
+        // Update Camera.
+        {
+            let x_dir = (right_pressed - left_pressed) as f32 * 5.0 * dt;
+            let y_dir = (up_pressed - down_pressed) as f32 * 5.0 * dt;
+            let mut camera = window.get_camera();
+            let cam_dir = camera.get_fwd();
+            let fwd = Vector3D::new(cam_dir[0], cam_dir[1], 0.0).normalize();
+            let right = camera.get_right();
+            let dir = right * x_dir + fwd * -y_dir;
+            camera.pos = camera.pos + dir;
+            camera.target = camera.target + dir;
+        }
+
+        // Update Objects.
+        let mut count = 0.0;
+        for elem in &mut boxes {
+            elem.scale = 0.5 + (((
+                    elapsed_time * 10.0 + (((count % 5.0) / 4.0) * 3.1415)).sin() + 1.0) / 3.0);
+            count += 1.0;
+        }
+
         window.clear();
-        window.draw_instance(&box_instance);
+        for elem in &boxes {
+            window.draw_instance(&elem);
+        }
         window.swap_buffers();
 
         
 
         for event in window.poll_events() {
             match event {
+                Event::KeyboardInput(state, _, Some(key)) => {
+                    let pressed = if state == ElementState::Pressed { 1 } else { 0 };
+                    match key {
+                        VirtualKeyCode::Left => left_pressed = pressed,
+                        VirtualKeyCode::Right => right_pressed = pressed,
+                        VirtualKeyCode::Up => up_pressed = pressed,
+                        VirtualKeyCode::Down => down_pressed = pressed,
+                        _ => (),
+                    }
+                }
                 Event::Closed => process::exit(0),
                 _ => ()
             }
