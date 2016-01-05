@@ -1,7 +1,4 @@
-// Work in progress of a 2D game using glutin for context creation/input
-// handling and gl-rs for OpenGL bindings. The game will be a simple top down
-// action-RPG created for educational purposes to assess the viability of Rust
-// as a video game development language.
+// Work in progress. This program still needs to be refactored into modules.
 //
 // Brian Ho
 // brian@brkho.com
@@ -13,12 +10,11 @@ extern crate glutin;
 extern crate gl;
 extern crate time;
 
-use cgmath::Point;
-use cgmath::Matrix;
-use cgmath::EuclideanVector;
+use cgmath::{Point, Matrix, EuclideanVector};
 use gl::types::*;
 use glutin::{Window, Event, VirtualKeyCode, ElementState};
 use mmo::util::shader;
+use std::cell::Cell;
 use std::ffi::CString;
 use std::mem;
 use std::process;
@@ -74,22 +70,30 @@ impl Material {
     }
 }
 
+#[derive(Copy, Clone)]
+pub struct VBOInfo {
+    pub start: u32,
+    pub size: u32,
+    pub generation: u32,
+}
+
 // Stores information about the model which can be instantiated to create a ModelInstance. 
 pub struct ModelInfo {
     pub vertices: Vec<GLfloat>,
     pub color: Color,
     pub mat: Material,
+    pub vbo_info: Cell<Option<VBOInfo>>,
 }
 
 impl ModelInfo {
     // Default constructor with color initialized to <1.0, 1.0, 1.0, 1.0>.
     pub fn new(vertices: Vec<GLfloat>, mat: Material) -> ModelInfo {
-        ModelInfo { vertices: vertices, color: Color::new_rgb(1.0, 1.0, 1.0), mat: mat }
+        ModelInfo::new_with_color(vertices, Color::new_rgb(1.0, 1.0, 1.0), mat)
     }
 
     // Constructor to create a ModelInfo with a Color.
     pub fn new_with_color(vertices: Vec<GLfloat>, color: Color, mat: Material) -> ModelInfo {
-        ModelInfo { vertices: vertices, color: color, mat: mat }
+        ModelInfo { vertices: vertices, color: color, mat: mat, vbo_info: Cell::new(None) }
     }
 
     // Creates a box with specified size and color.
@@ -260,7 +264,8 @@ pub struct SpotLight {
 // around the glutin Window class and will manage draws to the glutin window.
 pub struct GameWindow {
     pub bg_color: Color,
-    pub camera: Option<PerspectiveCamera>,
+    pub cameras: Vec<Option<PerspectiveCamera>>,
+    active_camera: Option<usize>,
     gl_window: Window,
     point_lights: Vec<Option<PointLight>>,
     directional_lights: Vec<Option<DirectionalLight>>,
@@ -287,8 +292,9 @@ impl GameWindow {
         gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
 
         let mut window = GameWindow {
-                bg_color: bg_color, camera: None, gl_window: gl_window, vao: 0, vbo: 0,
-                program: 0, point_lights: pl, directional_lights: dl, spot_lights: sl };
+                bg_color: bg_color, cameras: Vec::new(), gl_window: gl_window, vao: 0, vbo: 0,
+                program: 0, point_lights: pl, directional_lights: dl, spot_lights: sl,
+                active_camera: None };
         // Begin unsafe OpenGL shenanigans. Here, we compile and link the shaders, set up the VAO
         // and VBO, and specify the layout of the vertex data.
         unsafe {
@@ -323,13 +329,59 @@ impl GameWindow {
         Ok(window)
     }
 
-    // Adds a Camera, setting the value to Some(camera).
-    pub fn attach_camera(&mut self, camera: PerspectiveCamera) {
-        self.camera = Some(camera);
+    // Adds a Camera to the engine and returns an integer handle to that camera that can be used
+    // with get_camera() and detach_camera().
+    pub fn attach_camera(&mut self, camera: PerspectiveCamera) -> usize {
+        let mut index = None;
+        for (i, elem) in self.cameras.iter().enumerate() {
+            match elem {
+                &None => { index = Some(i); },
+                &Some(_) => (),
+            }
+        }
+        match index {
+            None => {
+                self.cameras.push(Some(camera));
+                self.cameras.len() - 1
+            }
+            Some(i) => {
+                self.cameras[i] = Some(camera);
+                i
+            }
+        }
     }
 
-    pub fn get_camera(&mut self) -> &mut PerspectiveCamera {
-        self.camera.as_mut().unwrap()
+    // Removes a camera from the engine and returns a Result if it was successful.
+    pub fn detach_camera(&mut self, handle: usize) -> Result<(), String> {
+        if handle >= self.cameras.len() { return Err("Out of range.".to_string()); }
+        match self.active_camera {
+            None => (),
+            Some(c) => if handle == c { self.active_camera = None; },
+        }
+        self.cameras[handle] = None;
+        Ok(())
+    }
+
+    // Takes in a handle and returns a mut reference to the corresponding camera if it is within
+    // range. Otherwise, return an Err.
+    pub fn get_camera(&mut self, handle: usize) -> Result<&mut PerspectiveCamera, String> {
+        if handle >= self.cameras.len() { return Err("Out of range.".to_string()); }
+        Ok(self.cameras[handle].as_mut().unwrap())
+    }
+
+    // Gets a mut reference to the active camera. Returns Err if no current active camera.
+    pub fn get_active_camera(&mut self) -> Result<&mut PerspectiveCamera, String> {
+        match self.active_camera {
+            None => Err("No currently active camera.".to_string()),
+            Some(c) => self.get_camera(c)
+        }
+    }
+
+    // Sets the active camera used for rendering given a handle.
+    pub fn set_active_camera(&mut self, handle: usize) -> Result<(), String> {
+        if handle >= self.cameras.len() { return Err("Out of range.".to_string()); }
+        self.active_camera = Some(handle);
+        Ok(())
     }
 
     // Constructs and adds a PointLight to the scene. This then returns an u16 handle (internally
@@ -460,9 +512,20 @@ impl GameWindow {
     // 4. add a generation int and increment it on clear_vertex_buffers(). generation must be the
     //    same when draw_instance() or else must remap.
     pub fn draw_instance(&self, instance: &ModelInstance) {
-        let camera = match self.camera {
+        let vbo_info = match instance.info.vbo_info.get() {
+            None => {
+                let mut new_vbo_info = VBOInfo { start: 0, size: 0, generation: 0 };
+                instance.info.vbo_info.set(Some(new_vbo_info));
+                new_vbo_info
+            },
+            Some(v) => v
+        };
+        // vbo_info.start = 0;
+
+
+        let camera = match self.active_camera {
             None => { return; },
-            Some(ref c) => c,
+            Some(c) => self.cameras[c].as_ref().unwrap(),
         };
         let model = cgmath::Matrix4::from(cgmath::Decomposed {
                 scale: instance.scale, rot: instance.rot, disp: instance.pos });
@@ -498,10 +561,15 @@ impl GameWindow {
 // Driver test program.
 fn main() {
     let mut window = GameWindow::new(800, 600, "Engine Test".to_string()).unwrap();
-    let camera = PerspectiveCamera::new(
+    let camera1 = PerspectiveCamera::new(
             Vector3D::new(7.0, 7.0, 7.0), Vector3D::new(0.0, 0.0, 0.0), window.get_aspect_ratio(),
             45.0, 1.0, 100.0);
-    window.attach_camera(camera);
+    let camera2 = PerspectiveCamera::new(
+            Vector3D::new(0.00001, 0.0, 10.0), Vector3D::new(0.0, 0.0, 0.0),
+            window.get_aspect_ratio(), 45.0, 0.1, 100.0);
+    let main_camera = window.attach_camera(camera1);
+    let secondary_camera = window.attach_camera(camera2);
+    window.set_active_camera(main_camera).unwrap();
     let rb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
     let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
     let yb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 1.0, 0.0)));
@@ -526,6 +594,7 @@ fn main() {
     let mut right_pressed = 0;
     let mut up_pressed = 0;
     let mut down_pressed = 0;
+    let mut shift_pressed = 0;
     let mut last_time = time::now().to_timespec();
     let mut elapsed_time = 0.0;
     loop {
@@ -534,11 +603,17 @@ fn main() {
         let dt = elapsed_msec as f32 / 1000000.0;
         elapsed_time += dt;
         last_time = curr_time;
+
         // Update Camera.
         {
+            if shift_pressed == 0 {
+                window.set_active_camera(main_camera).unwrap();
+            } else {
+                window.set_active_camera(secondary_camera).unwrap();
+            }
             let x_dir = (right_pressed - left_pressed) as f32 * 5.0 * dt;
             let y_dir = (up_pressed - down_pressed) as f32 * 5.0 * dt;
-            let mut camera = window.get_camera();
+            let mut camera = window.get_active_camera().unwrap();
             let cam_dir = camera.get_fwd();
             let fwd = Vector3D::new(cam_dir[0], cam_dir[1], 0.0).normalize();
             let right = camera.get_right();
@@ -561,8 +636,6 @@ fn main() {
         }
         window.swap_buffers();
 
-        
-
         for event in window.poll_events() {
             match event {
                 Event::KeyboardInput(state, _, Some(key)) => {
@@ -572,6 +645,7 @@ fn main() {
                         VirtualKeyCode::Right => right_pressed = pressed,
                         VirtualKeyCode::Up => up_pressed = pressed,
                         VirtualKeyCode::Down => down_pressed = pressed,
+                        VirtualKeyCode::LShift => shift_pressed = pressed,
                         _ => (),
                     }
                 }
