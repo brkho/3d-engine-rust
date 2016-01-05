@@ -12,7 +12,7 @@ macro_rules! float_size { ($n:expr, $t:ty) => (($n * mem::size_of::<GLfloat>()) 
 
 #[macro_export]
 // Macro for casting and getting the address in memory of the first element of a vector.
-macro_rules! vec_to_addr { ($i:ident) => (mem::transmute($i.get_unchecked(0))) }
+macro_rules! vec_to_addr { ($i:expr) => (mem::transmute($i.get_unchecked(0))) }
 
 #[macro_export]
 // Macro for converting between &str and a GL readable string.
