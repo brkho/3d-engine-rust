@@ -33,6 +33,11 @@ pub type Quaternion = cgmath::Quaternion<GLfloat>;
 // Number of floats in a VBO.
 const VBO_SIZE: usize = 65535 - 252;
 
+// Contents of a VBO.
+const VERTEX_POS_SIZE: usize = 3;
+const VERTEX_COLOR_SIZE: usize = 4;
+const VERTEX_SIZE: usize = VERTEX_POS_SIZE + VERTEX_COLOR_SIZE;
+
 // Represents a color in RGBA with intensity values from 0.0 to 1.0.
 pub struct Color {
     pub r: GLfloat,
@@ -81,6 +86,7 @@ pub struct VBOInfo {
     pub start: usize,
     pub size: usize,
     pub vbo: GLuint,
+    pub vao: GLuint,
 }
 
 // Stores information about the model which can be instantiated to create a ModelInstance. 
@@ -276,11 +282,10 @@ pub struct GameWindow {
     point_lights: Vec<Option<PointLight>>,
     directional_lights: Vec<Option<DirectionalLight>>,
     spot_lights: Vec<Option<SpotLight>>,
-    vao: GLuint,
     program: GLuint,
     gen: usize,
     bound_vbo: Option<GLuint>,
-    vbos: Vec<(GLuint, usize)>, // (vbo_id, size)
+    vbos: Vec<(GLuint, GLuint, usize)>, // (vao_id, vbo_id, size)
 
 }
 
@@ -301,7 +306,7 @@ impl GameWindow {
         gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
 
         let mut window = GameWindow {
-                bg_color: bg_color, cameras: Vec::new(), gl_window: gl_window, vao: 0,
+                bg_color: bg_color, cameras: Vec::new(), gl_window: gl_window,
                 program: 0, point_lights: pl, directional_lights: dl, spot_lights: sl,
                 active_camera: None, gen: 0, vbos: Vec::new(), bound_vbo: None };
         // Begin unsafe OpenGL shenanigans. Here, we compile and link the shaders, set up the VAO
@@ -310,26 +315,10 @@ impl GameWindow {
             let vs = shader::compile_shader("std.vert", gl::VERTEX_SHADER);
             let fs = shader::compile_shader("std.frag", gl::FRAGMENT_SHADER);
             window.program = shader::link_program(vs, fs);
-
-            gl::GenVertexArrays(1, &mut window.vao);
-            gl::BindVertexArray(window.vao);
             window.initialize_vbo();
             gl::Enable(gl::DEPTH_TEST);
-            
-
             gl::UseProgram(window.program);
             gl::BindFragDataLocation(window.program, 0, gl_str!("out_color"));
-
-            // let pos_attr = gl::GetAttribLocation(window.program, gl_str!("position"));
-            // gl::EnableVertexAttribArray(pos_attr as GLuint);
-            // gl::VertexAttribPointer(
-            //         pos_attr as GLuint, 3, gl::FLOAT, gl::FALSE as GLboolean,
-            //         float_size!(7, GLsizei), ptr::null());
-            // let color_attr = gl::GetAttribLocation(window.program, gl_str!("color"));
-            // gl::EnableVertexAttribArray(color_attr as GLuint);
-            // gl::VertexAttribPointer(
-            //         color_attr as GLuint, 4, gl::FLOAT, gl::FALSE as GLboolean,
-            //         float_size!(7, GLsizei), float_size!(3, CVoid));
         }
 
         window.set_size(width, height);
@@ -338,38 +327,39 @@ impl GameWindow {
         Ok(window)
     }
 
-    // A helper method for binding the VBO that sets/checks the previously bound buffer.
-    fn bind_vbo_checked(&mut self, vbo: GLuint) { unsafe {
+    // A helper method for binding the VAO and VBO that sets/checks the previously bound buffer.
+    fn bind_buffers_checked(&mut self, vao: GLuint, vbo: GLuint) { unsafe {
         match self.bound_vbo {
             Some(b) => { if b == vbo { return }; },
             None => (),
         };
-        println!("switching buffers to {}...", vbo);
         self.bound_vbo = Some(vbo);
+        gl::BindVertexArray(vao);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
     } }
 
     // Initializes an managed empty VBO of size VBO_SIZE and returns the handle.
     fn initialize_vbo(&mut self) { unsafe {
         let mut vbo = 0;
+        let mut vao = 0;
+        gl::GenVertexArrays(1, &mut vao);
         gl::GenBuffers(1, &mut vbo);
-        println!("generated VBO: {}", vbo);
-        self.bind_vbo_checked(vbo);
+        println!("generated VAO: {}, VBO: {}", vao, vbo);
+        self.bind_buffers_checked(vao, vbo);
         gl::BufferData(
                 gl::ARRAY_BUFFER, float_size!(VBO_SIZE, GLsizeiptr),
                 0 as CVoid, gl::STATIC_DRAW);
-
         let pos_attr = gl::GetAttribLocation(self.program, gl_str!("position"));
         gl::EnableVertexAttribArray(pos_attr as GLuint);
         gl::VertexAttribPointer(
-                pos_attr as GLuint, 3, gl::FLOAT, gl::FALSE as GLboolean,
-                float_size!(7, GLsizei), ptr::null());
+                pos_attr as GLuint, VERTEX_POS_SIZE as i32, gl::FLOAT, gl::FALSE as GLboolean,
+                float_size!(VERTEX_SIZE, GLsizei), ptr::null());
         let color_attr = gl::GetAttribLocation(self.program, gl_str!("color"));
         gl::EnableVertexAttribArray(color_attr as GLuint);
         gl::VertexAttribPointer(
-                color_attr as GLuint, 4, gl::FLOAT, gl::FALSE as GLboolean,
-                float_size!(7, GLsizei), float_size!(3, CVoid));
-        self.vbos.push((vbo, 0));
+                color_attr as GLuint, VERTEX_COLOR_SIZE as i32, gl::FLOAT, gl::FALSE as GLboolean,
+                float_size!(VERTEX_SIZE, GLsizei), float_size!(VERTEX_POS_SIZE, CVoid));
+        self.vbos.push((vao, vbo, 0));
     }}
 
     // Adds a Camera to the engine and returns an integer handle to that camera that can be used
@@ -544,31 +534,8 @@ impl GameWindow {
         (width as f32) / (height as f32)
     }
 
-    // Private method to manage the engine's VBO space and return the VBOInfo of a particular
-    // ModelInfo. If there is no associated VBOInfo for a ModelInfo, then we find an empty space in
-    // the engine's VBO space and assign a new VBOInfo. If there is no more empty space in any of
-    // the managed VBOs, we create a new VBO and assign it there instead. There is also a
-    // generation field in both the VBOInfo and the Engine. On clear_vertex_buffers(), we increment
-    // this generation count in the engine. If the generation count on the ModelInfo does not match
-    // the count of the Engine, we remap.
-    fn get_vbo_info(&mut self, info: Rc<ModelInfo>) {
-        let vbo_info = info.vbo_info.get();
-        match vbo_info {
-            None => {
-                // for &(vbo_num, vbo_size) in &self.vbos {
-                //     if info.vertices.len() as i32 < VBO_SIZE as i32 - vbo_size as i32 {
-
-                //     }
-                //     println!("vbo_num: {}, size: {}", vbo_num, vbo_size);
-                // }
-            },
-            Some(v) => { ()
-            }
-        }
-    }
-
-    // Private helper method that maps a given Rc<ModelInfo> to a VBO location.
-    fn map_vbo(&mut self, info: Rc<ModelInfo>) {
+    // Maps/remaps a given Rc<ModelInfo> to a VBO location in the engine.
+    pub fn map_vbo(&mut self, info: Rc<ModelInfo>) {
         let mut vertices: Vec<GLfloat> = Vec::new();
         for x in 0..info.vertices.len() {
             if x % 3 != 0 {
@@ -585,7 +552,7 @@ impl GameWindow {
 
         let mut index = -1;
         for (i, vbo_pair) in self.vbos.iter().enumerate() {
-            if (vertices.len() as i32) < (VBO_SIZE as i32) - (vbo_pair.1 as i32) {
+            if (vertices.len() as i32) < (VBO_SIZE as i32) - (vbo_pair.2 as i32) {
                 index = i as i32;
                 break;
             }
@@ -596,40 +563,40 @@ impl GameWindow {
         }
         let vbo_pair = self.vbos[index as usize];
         let new_vbo = VBOInfo {
-                start: vbo_pair.1, size: vertices.len(), gen: self.gen, vbo: vbo_pair.0 };
-        self.bind_vbo_checked(new_vbo.vbo);
+                start: vbo_pair.2, size: vertices.len(), gen: self.gen,
+                vao: vbo_pair.0, vbo: vbo_pair.1 };
+        self.bind_buffers_checked(new_vbo.vao, new_vbo.vbo);
         unsafe {
             gl::BufferSubData(
                     gl::ARRAY_BUFFER, float_size!(new_vbo.start, GLintptr),
                     float_size!(new_vbo.size, GLsizeiptr), vec_to_addr!(vertices));
         }
         info.vbo_info.set(Some(new_vbo));
-        self.vbos[index as usize] = (vbo_pair.0, vbo_pair.1 + vertices.len());
+        self.vbos[index as usize] = (vbo_pair.0, vbo_pair.1, vbo_pair.2 + vertices.len());
+    }
+
+    // Clears the VBOs so that every ModelInfo currently mapped to the engine's VBO space must be
+    // remapped on the next draw_instance() call.
+    pub fn clear_vertex_buffers(&mut self) {
+        self.gen += 1;
+        for vbo_pair in self.vbos.iter_mut() {
+            *vbo_pair = (vbo_pair.0, vbo_pair.1, 0);
+        }
     }
 
     // Draw a ModelInstance to the window using a camera, position, vertices, and materials.
-    // TODO: We are currently doing some immediate mode-esque rendering by discarding the VBO every
-    // draw. This is pretty bad and is going to be a bottleneck. Look into having the GameWindow
-    // manage the VBO data.
-    // The current plan is to:
-    // 1. add VBO, start, size, and generation fields to ModelInfo
-    // 2. allocate 65535 sized VBOs on draw_instance. If (start, size) is None, then allocate.
-    // 3. if there is no more room, make new VBO (and if size is > 65535, allocate for that size).
-    // 4. add a generation int and increment it on clear_vertex_buffers(). generation must be the
-    //    same when draw_instance() or else must remap.
+    // This method also manages the engine's VBO space and updates the VBOInfo of the instance's
+    // ModelInfo. If there is no associated VBOInfo for a ModelInfo, then we find an empty space in
+    // the engine's VBO space and assign a new VBOInfo. If there is no more empty space in any of
+    // the managed VBOs, we create a new VBO and assign it there instead. There is also a
+    // generation field in both the VBOInfo and the Engine. On clear_vertex_buffers(), we increment
+    // this generation count in the engine. If the generation count on the ModelInfo does not match
+    // the count of the Engine, we remap.
     pub fn draw_instance(&mut self, instance: &ModelInstance) {
-        // let vbo_info = match instance.info.vbo_info.get() {
-        //     None => {
-        //         let num_vertices = instance.info.vertices.len();
-        //         let mut new_vbo_info = VBOInfo { start: 0, size: 0, gen: self.gen };
-        //         instance.info.vbo_info.set(Some(new_vbo_info));
-        //         new_vbo_info
-        //     },
-        //     Some(v) => v
-        // };
-        // vbo_info.start = 0;
-        self.map_vbo(instance.info.clone());
-        // println!("COLOR: ({}, {}, {})  |  VBO: {}  |  VBO_START: {}", instance.info.color.r, instance.info.color.g, instance.info.color.b, instance.info.vbo_info.get().unwrap().vbo, instance.info.vbo_info.get().unwrap().start);
+        match instance.info.vbo_info.get() {
+            None => { self.map_vbo(instance.info.clone()); },
+            Some(i) => { if i.gen != self.gen { self.map_vbo(instance.info.clone()) }; },
+        }
 
         let mut transform = {
             let camera = match self.active_camera {
@@ -644,29 +611,14 @@ impl GameWindow {
         };
 
         unsafe {
-            // let mut vertices: Vec<GLfloat> = Vec::new();
-            // for x in 0..instance.info.vertices.len() {
-            //     if x % 3 != 0 {
-            //         continue;
-            //     }
-            //     vertices.push(instance.info.vertices[x]);
-            //     vertices.push(instance.info.vertices[x + 1]);
-            //     vertices.push(instance.info.vertices[x + 2]);
-            //     vertices.push(instance.info.color.r);
-            //     vertices.push(instance.info.color.g);
-            //     vertices.push(instance.info.color.b);
-            //     vertices.push(instance.info.color.a);
-            // }
-            // gl::BufferData(
-            //     gl::ARRAY_BUFFER, float_size!(vertices.len(), GLsizeiptr),
-            //     vec_to_addr!(vertices), gl::STATIC_DRAW);
-
             let vbo_info = instance.info.vbo_info.get().unwrap();
-            self.bind_vbo_checked(vbo_info.vbo);
+            self.bind_buffers_checked(vbo_info.vao, vbo_info.vbo);
             gl::UniformMatrix4fv(
                     gl::GetUniformLocation(self.program, gl_str!("transform")), 1,
                     gl::FALSE as GLboolean, transform.as_mut_ptr());
-            gl::DrawArrays(gl::TRIANGLES, (vbo_info.start / 7) as i32, (vbo_info.size / 7) as i32);
+            gl::DrawArrays(
+                    gl::TRIANGLES, (vbo_info.start / VERTEX_SIZE) as i32,
+                    (vbo_info.size / VERTEX_SIZE) as i32);
         }
     }
 }
