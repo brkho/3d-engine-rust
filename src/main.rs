@@ -31,7 +31,7 @@ pub type Vector3D = cgmath::Vector3<GLfloat>;
 pub type Quaternion = cgmath::Quaternion<GLfloat>;
 
 // Number of floats in a VBO.
-const VBO_SIZE: usize = 65535 - 252;
+const BUFFER_SIZE: usize = 65535;
 
 // Contents of a VBO.
 const VERTEX_POS_SIZE: usize = 3;
@@ -81,20 +81,22 @@ impl Material {
 }
 
 #[derive(Copy, Clone)]
-pub struct VBOInfo {
+pub struct BufferInfo {
     pub gen: usize,
     pub start: usize,
     pub size: usize,
     pub vbo: GLuint,
     pub vao: GLuint,
+    pub ebo: Option<GLuint>,
 }
 
 // Stores information about the model which can be instantiated to create a ModelInstance. 
 pub struct ModelInfo {
     pub vertices: Vec<GLfloat>,
+    pub elements: Option<Vec<GLuint>>,
     pub color: Color,
     pub mat: Material,
-    pub vbo_info: Cell<Option<VBOInfo>>,
+    pub buffer_info: Cell<Option<BufferInfo>>,
 }
 
 impl ModelInfo {
@@ -105,7 +107,8 @@ impl ModelInfo {
 
     // Constructor to create a ModelInfo with a Color.
     pub fn new_with_color(vertices: Vec<GLfloat>, color: Color, mat: Material) -> ModelInfo {
-        ModelInfo { vertices: vertices, color: color, mat: mat, vbo_info: Cell::new(None) }
+        ModelInfo { vertices: vertices, color: color, mat: mat, buffer_info: Cell::new(None),
+                elements: None }
     }
 
     // Creates a box with specified size and color.
@@ -285,7 +288,9 @@ pub struct GameWindow {
     program: GLuint,
     gen: usize,
     bound_vbo: Option<GLuint>,
+    bound_ebo: Option<GLuint>,
     vbos: Vec<(GLuint, GLuint, usize)>, // (vao_id, vbo_id, size)
+    ebos: Vec<(GLuint, usize)>, // (ebo_id, size)
 
 }
 
@@ -308,7 +313,8 @@ impl GameWindow {
         let mut window = GameWindow {
                 bg_color: bg_color, cameras: Vec::new(), gl_window: gl_window,
                 program: 0, point_lights: pl, directional_lights: dl, spot_lights: sl,
-                active_camera: None, gen: 0, vbos: Vec::new(), bound_vbo: None };
+                active_camera: None, gen: 0, vbos: Vec::new(), bound_vbo: None, ebos: Vec::new(),
+                bound_ebo: None };
         // Begin unsafe OpenGL shenanigans. Here, we compile and link the shaders, set up the VAO
         // and VBO, and specify the layout of the vertex data.
         unsafe {
@@ -316,6 +322,7 @@ impl GameWindow {
             let fs = shader::compile_shader("std.frag", gl::FRAGMENT_SHADER);
             window.program = shader::link_program(vs, fs);
             window.initialize_vbo();
+            window.initialize_ebo();
             gl::Enable(gl::DEPTH_TEST);
             gl::UseProgram(window.program);
             gl::BindFragDataLocation(window.program, 0, gl_str!("out_color"));
@@ -328,26 +335,41 @@ impl GameWindow {
     }
 
     // A helper method for binding the VAO and VBO that sets/checks the previously bound buffer.
-    fn bind_buffers_checked(&mut self, vao: GLuint, vbo: GLuint) { unsafe {
-        match self.bound_vbo {
-            Some(b) => { if b == vbo { return }; },
-            None => (),
-        };
-        self.bound_vbo = Some(vbo);
-        gl::BindVertexArray(vao);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+    fn bind_buffers_checked(&mut self, vao: Option<GLuint>, vbo: Option<GLuint>,
+            ebo: Option<GLuint>) { unsafe {
+        if match (self.bound_vbo, vbo) {
+                (Some(vbo1), Some(vbo2)) => vbo1 != vbo2,
+                (None, Some(_)) => true,
+                (_, None) => false, } {
+            match vao {
+                Some(vao1) => { gl::BindVertexArray(vao1) },
+                None => (),
+            };
+            self.bound_vbo = vbo;
+            println!("Switching VBO buffers to {}...", vbo.unwrap());
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo.unwrap());
+        }
+
+        if match (self.bound_ebo, ebo) {
+                (Some(ebo1), Some(ebo2)) => ebo1 != ebo2,
+                (None, Some(_)) => true,
+                (_, None) => false, } {
+            self.bound_ebo = ebo;
+            println!("Switching EBO buffers to {}...", ebo.unwrap());
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo.unwrap());
+        }
     } }
 
-    // Initializes an managed empty VBO of size VBO_SIZE and returns the handle.
+    // Initializes a managed empty VBO of size BUFFER_SIZE and adds it to the vector of VBOs.
     fn initialize_vbo(&mut self) { unsafe {
         let mut vbo = 0;
         let mut vao = 0;
         gl::GenVertexArrays(1, &mut vao);
         gl::GenBuffers(1, &mut vbo);
         println!("generated VAO: {}, VBO: {}", vao, vbo);
-        self.bind_buffers_checked(vao, vbo);
+        self.bind_buffers_checked(Some(vao), Some(vbo), None);
         gl::BufferData(
-                gl::ARRAY_BUFFER, float_size!(VBO_SIZE, GLsizeiptr),
+                gl::ARRAY_BUFFER, float_size!(BUFFER_SIZE, GLsizeiptr),
                 0 as CVoid, gl::STATIC_DRAW);
         let pos_attr = gl::GetAttribLocation(self.program, gl_str!("position"));
         gl::EnableVertexAttribArray(pos_attr as GLuint);
@@ -361,6 +383,19 @@ impl GameWindow {
                 float_size!(VERTEX_SIZE, GLsizei), float_size!(VERTEX_POS_SIZE, CVoid));
         self.vbos.push((vao, vbo, 0));
     }}
+
+    // Initializes a managed empty EBO of size BUFFER_SIZE and adds it to the vector of EBOs.
+    fn initialize_ebo(&mut self) { unsafe {
+        let mut ebo = 0;
+        gl::GenBuffers(1, &mut ebo);
+        println!("generated EBO: {}", ebo);
+        self.bind_buffers_checked(None, None, Some(ebo));
+        gl::BufferData(
+                gl::ELEMENT_ARRAY_BUFFER, uint_size!(BUFFER_SIZE, GLsizeiptr),
+                0 as CVoid, gl::STATIC_DRAW);
+        self.ebos.push((ebo, 0));
+    }}
+
 
     // Adds a Camera to the engine and returns an integer handle to that camera that can be used
     // with get_camera() and detach_camera().
@@ -534,7 +569,7 @@ impl GameWindow {
         (width as f32) / (height as f32)
     }
 
-    // Maps/remaps a given Rc<ModelInfo> to a VBO location in the engine.
+    // Maps/remaps a given Rc<ModelInfo> to VBO and EBO locations in the engine's managed buffers.
     pub fn map_vbo(&mut self, info: Rc<ModelInfo>) {
         let mut vertices: Vec<GLfloat> = Vec::new();
         for x in 0..info.vertices.len() {
@@ -549,30 +584,74 @@ impl GameWindow {
             vertices.push(info.color.b);
             vertices.push(info.color.a);
         }
-
-        let mut index = -1;
-        for (i, vbo_pair) in self.vbos.iter().enumerate() {
-            if (vertices.len() as i32) < (VBO_SIZE as i32) - (vbo_pair.2 as i32) {
-                index = i as i32;
-                break;
+        // Find empty EBO space.
+        let ebo_index = match info.elements {
+            None => None,
+            Some(ref elements) => {
+                let mut index = None;
+                for (i, ebo_pair) in self.ebos.iter().enumerate() {
+                    if elements.len() < BUFFER_SIZE - ebo_pair.1 {
+                        index = Some(i);
+                        break;
+                    }
+                }
+                match index {
+                    None => {
+                        self.initialize_ebo();
+                        Some(self.ebos.len() - 1)
+                    },
+                    Some(_) => index,
+                }
             }
+        };
+
+        // Find empty VBO space.
+        let vbo_index = {
+            let mut index = None;
+            for (i, vbo_pair) in self.vbos.iter().enumerate() {
+                if vertices.len() < BUFFER_SIZE - vbo_pair.2 {
+                    index = Some(i);
+                    break;
+                }
+            }
+            match index {
+                None => {
+                    self.initialize_vbo();
+                    self.vbos.len() - 1
+                },
+                Some(i) => i,
+            }
+        };
+
+        let vbo_pair = self.vbos[vbo_index];
+        let buffer_info = match ebo_index {
+            None => BufferInfo {
+                    start: vbo_pair.2 / VERTEX_SIZE, size: vertices.len() / VERTEX_SIZE,
+                    gen: self.gen, vao: vbo_pair.0, vbo: vbo_pair.1, ebo: None },
+            Some(i) => BufferInfo {
+                    start: self.ebos[i].1, size: info.elements.as_ref().unwrap().len(),
+                    gen: self.gen, vao: vbo_pair.0, vbo: vbo_pair.1, ebo: Some(self.ebos[i].0) },
+        };
+        self.bind_buffers_checked(Some(buffer_info.vao), Some(buffer_info.vbo), buffer_info.ebo);
+        info.buffer_info.set(Some(buffer_info));
+
+        if let Some(i) = ebo_index {
+            let ebo_pair = self.ebos[i];
+            let elements = info.elements.as_ref().unwrap();
+            unsafe {
+                gl::BufferSubData(
+                        gl::ELEMENT_ARRAY_BUFFER, uint_size!(ebo_pair.1, GLintptr),
+                        uint_size!(elements.len(), GLsizeiptr), vec_to_addr!(elements));
+            }
+            self.ebos[i] = (ebo_pair.0, ebo_pair.1 + elements.len());
         }
-        if index == -1 {
-            self.initialize_vbo();
-            index = (self.vbos.len() - 1) as i32;
-        }
-        let vbo_pair = self.vbos[index as usize];
-        let new_vbo = VBOInfo {
-                start: vbo_pair.2, size: vertices.len(), gen: self.gen,
-                vao: vbo_pair.0, vbo: vbo_pair.1 };
-        self.bind_buffers_checked(new_vbo.vao, new_vbo.vbo);
+
         unsafe {
             gl::BufferSubData(
-                    gl::ARRAY_BUFFER, float_size!(new_vbo.start, GLintptr),
-                    float_size!(new_vbo.size, GLsizeiptr), vec_to_addr!(vertices));
+                    gl::ARRAY_BUFFER, float_size!(vbo_pair.2, GLintptr),
+                    float_size!(vertices.len(), GLsizeiptr), vec_to_addr!(vertices));
         }
-        info.vbo_info.set(Some(new_vbo));
-        self.vbos[index as usize] = (vbo_pair.0, vbo_pair.1, vbo_pair.2 + vertices.len());
+        self.vbos[vbo_index] = (vbo_pair.0, vbo_pair.1, vbo_pair.2 + vertices.len());
     }
 
     // Clears the VBOs so that every ModelInfo currently mapped to the engine's VBO space must be
@@ -585,15 +664,15 @@ impl GameWindow {
     }
 
     // Draw a ModelInstance to the window using a camera, position, vertices, and materials.
-    // This method also manages the engine's VBO space and updates the VBOInfo of the instance's
-    // ModelInfo. If there is no associated VBOInfo for a ModelInfo, then we find an empty space in
-    // the engine's VBO space and assign a new VBOInfo. If there is no more empty space in any of
+    // This method also manages the engine's VBO space and updates the BufferInfo of the instance's
+    // ModelInfo. If there is no associated BufferInfo for a ModelInfo, then we find an empty space in
+    // the engine's VBO space and assign a new BufferInfo. If there is no more empty space in any of
     // the managed VBOs, we create a new VBO and assign it there instead. There is also a
-    // generation field in both the VBOInfo and the Engine. On clear_vertex_buffers(), we increment
+    // generation field in both the BufferInfo and the Engine. On clear_vertex_buffers(), we increment
     // this generation count in the engine. If the generation count on the ModelInfo does not match
     // the count of the Engine, we remap.
     pub fn draw_instance(&mut self, instance: &ModelInstance) {
-        match instance.info.vbo_info.get() {
+        match instance.info.buffer_info.get() {
             None => { self.map_vbo(instance.info.clone()); },
             Some(i) => { if i.gen != self.gen { self.map_vbo(instance.info.clone()) }; },
         }
@@ -611,14 +690,16 @@ impl GameWindow {
         };
 
         unsafe {
-            let vbo_info = instance.info.vbo_info.get().unwrap();
-            self.bind_buffers_checked(vbo_info.vao, vbo_info.vbo);
+            let info = instance.info.buffer_info.get().unwrap();
+            self.bind_buffers_checked(Some(info.vao), Some(info.vbo), info.ebo);
             gl::UniformMatrix4fv(
                     gl::GetUniformLocation(self.program, gl_str!("transform")), 1,
                     gl::FALSE as GLboolean, transform.as_mut_ptr());
-            gl::DrawArrays(
-                    gl::TRIANGLES, (vbo_info.start / VERTEX_SIZE) as i32,
-                    (vbo_info.size / VERTEX_SIZE) as i32);
+            match instance.info.elements {
+                None => { gl::DrawArrays(gl::TRIANGLES, info.start as i32, info.size as i32); },
+                Some(_) => { gl::DrawElements(gl::TRIANGLES, info.size as i32,
+                        gl::UNSIGNED_INT, uint_size!(info.start, CVoid)); },
+            }
         }
     }
 }
@@ -673,6 +754,7 @@ fn main() {
         {
             if shift_pressed == 0 {
                 window.set_active_camera(main_camera).unwrap();
+                // window.clear_vertex_buffers();
             } else {
                 window.set_active_camera(secondary_camera).unwrap();
             }

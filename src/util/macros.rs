@@ -11,6 +11,10 @@
 macro_rules! float_size { ($n:expr, $t:ty) => (($n * mem::size_of::<GLfloat>()) as $t) }
 
 #[macro_export]
+// Macro for getting a multiple of the size for GLuint and casting it as an OpenGL type.
+macro_rules! uint_size { ($n:expr, $t:ty) => (($n * mem::size_of::<GLuint>()) as $t) }
+
+#[macro_export]
 // Macro for casting and getting the address in memory of the first element of a vector.
 macro_rules! vec_to_addr { ($i:expr) => (mem::transmute($i.get_unchecked(0))) }
 
