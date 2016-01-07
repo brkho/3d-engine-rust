@@ -30,8 +30,8 @@ type CVoid = *const std::os::raw::c_void;
 pub type Vector3D = cgmath::Vector3<GLfloat>;
 pub type Quaternion = cgmath::Quaternion<GLfloat>;
 
-// Number of floats in a VBO.
-const BUFFER_SIZE: usize = 65535;
+// Number of elements in a VBO or EBO.
+const BUFFER_SIZE: usize = 300;
 
 // Contents of a VBO.
 const VERTEX_POS_SIZE: usize = 3;
@@ -101,62 +101,83 @@ pub struct ModelInfo {
 
 impl ModelInfo {
     // Default constructor with color initialized to <1.0, 1.0, 1.0, 1.0>.
-    pub fn new(vertices: Vec<GLfloat>, mat: Material) -> ModelInfo {
-        ModelInfo::new_with_color(vertices, Color::new_rgb(1.0, 1.0, 1.0), mat)
+    pub fn new(vertices: Vec<GLfloat>, elems: Option<Vec<GLuint>>, mat: Material) -> ModelInfo {
+        ModelInfo::new_with_color(vertices, elems, Color::new_rgb(1.0, 1.0, 1.0), mat)
     }
 
     // Constructor to create a ModelInfo with a Color.
-    pub fn new_with_color(vertices: Vec<GLfloat>, color: Color, mat: Material) -> ModelInfo {
-        ModelInfo { vertices: vertices, color: color, mat: mat, buffer_info: Cell::new(None),
-                elements: None }
+    pub fn new_with_color(vertices: Vec<GLfloat>, elems: Option<Vec<GLuint>>, color: Color,
+            mat: Material) -> ModelInfo {
+        ModelInfo { vertices: vertices, elements: elems, color: color, mat: mat,
+                buffer_info: Cell::new(None) }
     }
 
     // Creates a box with specified size and color.
     pub fn new_box(scale_x: f32, scale_y: f32, scale_z: f32, color: Color) -> ModelInfo {
         let vertices: Vec<GLfloat> = vec![
-            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-             0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-             0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-             0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-            -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
 
-            -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-             0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-            -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-            -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+                 0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
 
-            -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-            -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-            -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-            -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
 
-             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-             0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-             0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-             0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-             0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
 
-            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-             0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-             0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-             0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-            -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-            -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+                 0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
 
-            -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-             0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-             0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-            -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-            -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z
+                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z
         ];
-        ModelInfo::new_with_color(vertices, color, Material::new())
+        ModelInfo::new_with_color(vertices, None, color, Material::new())
+    }
+
+    // Creates a box with specified size and color.
+    pub fn new_box_elems(scale_x: f32, scale_y: f32, scale_z: f32, color: Color) -> ModelInfo {
+        let vertices: Vec<GLfloat> = vec![
+                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+                -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+                 0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
+                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
+                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+        ];
+        let elements: Vec<GLuint> = vec![
+                0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4, 7, 3, 0, 0, 4, 7, 6, 2, 1, 1, 5, 6, 0,
+                1, 5, 5, 4, 0, 3, 2, 6, 6, 7, 8,
+        ];
+        ModelInfo::new_with_color(vertices, Some(elements), color, Material::new())
     }
 }
 
@@ -636,8 +657,13 @@ impl GameWindow {
         info.buffer_info.set(Some(buffer_info));
 
         if let Some(i) = ebo_index {
+            println!("Mapping EBO {} for COLOR: ({}, {}, {}), START: {}, SIZE: {}, V0: {}", buffer_info.ebo.unwrap(), info.color.r, info.color.g, info.color.b, buffer_info.start, buffer_info.size, (vbo_pair.2 as GLuint / VERTEX_SIZE as GLuint));
             let ebo_pair = self.ebos[i];
-            let elements = info.elements.as_ref().unwrap();
+            let mut elements: Vec<GLuint> = Vec::new();
+            for elem in info.elements.as_ref().unwrap() {
+                elements.push(elem.clone() + (vbo_pair.2 as GLuint / VERTEX_SIZE as GLuint));
+            }
+            // println!("Elements: {:?}", elements);
             unsafe {
                 gl::BufferSubData(
                         gl::ELEMENT_ARRAY_BUFFER, uint_size!(ebo_pair.1, GLintptr),
@@ -646,6 +672,7 @@ impl GameWindow {
             self.ebos[i] = (ebo_pair.0, ebo_pair.1 + elements.len());
         }
 
+        println!("        Mapping VBO {} for COLOR: ({}, {}, {}), START: {}, SIZE: {}", buffer_info.vbo, info.color.r, info.color.g, info.color.b, vbo_pair.2, vertices.len());
         unsafe {
             gl::BufferSubData(
                     gl::ARRAY_BUFFER, float_size!(vbo_pair.2, GLintptr),
@@ -660,6 +687,9 @@ impl GameWindow {
         self.gen += 1;
         for vbo_pair in self.vbos.iter_mut() {
             *vbo_pair = (vbo_pair.0, vbo_pair.1, 0);
+        }
+        for ebo_pair in self.ebos.iter_mut() {
+            *ebo_pair = (ebo_pair.0, 0);
         }
     }
 
@@ -716,11 +746,11 @@ fn main() {
     let main_camera = window.attach_camera(camera1);
     let secondary_camera = window.attach_camera(camera2);
     window.set_active_camera(main_camera).unwrap();
-    let rb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
-    let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
-    let yb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 1.0, 0.0)));
-    let gb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 1.0, 0.0)));
-    let bb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 1.0)));
+    let rb = Rc::new(ModelInfo::new_box_elems(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
+    let ob = Rc::new(ModelInfo::new_box_elems(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
+    let yb = Rc::new(ModelInfo::new_box_elems(1.0, 1.0, 1.0, Color::new_rgb(1.0, 1.0, 0.0)));
+    let gb = Rc::new(ModelInfo::new_box_elems(1.0, 1.0, 1.0, Color::new_rgb(0.0, 1.0, 0.0)));
+    let bb = Rc::new(ModelInfo::new_box_elems(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 1.0)));
     let mut boxes = Vec::new();
     for i in 0..5 {
         boxes.push(ModelInstance::from(rb.clone()));
@@ -754,9 +784,9 @@ fn main() {
         {
             if shift_pressed == 0 {
                 window.set_active_camera(main_camera).unwrap();
-                // window.clear_vertex_buffers();
             } else {
                 window.set_active_camera(secondary_camera).unwrap();
+                window.clear_vertex_buffers();
             }
             let x_dir = (right_pressed - left_pressed) as f32 * 5.0 * dt;
             let y_dir = (up_pressed - down_pressed) as f32 * 5.0 * dt;
@@ -800,6 +830,6 @@ fn main() {
                 _ => ()
             }
         }
-        // sleep(Duration::from_millis(500));
+        sleep(Duration::from_millis(500));
     }
 }
