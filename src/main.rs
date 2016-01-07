@@ -31,7 +31,7 @@ pub type Vector3D = cgmath::Vector3<GLfloat>;
 pub type Quaternion = cgmath::Quaternion<GLfloat>;
 
 // Number of elements in a VBO or EBO.
-const BUFFER_SIZE: usize = 3000;
+const BUFFER_SIZE: usize = 65535;
 
 // Contents of a VBO.
 const VERTEX_POS_SIZE: usize = 3;
@@ -367,53 +367,8 @@ impl GameWindow {
                 Some(bv) => bv != vao,
                 None => true, } {
             self.bound_vao = Some(vao);
-
-            // if vao == self.working_vao {
-            //     println!("switching VAO to WORKING VAO...");
-            // } else {
-            //     println!("switching VAO to {}...", vao);
-            // }
-
             gl::BindVertexArray(vao);
-
-
-            // if vao != self.working_vao {
-            //     gl::BindBuffer(gl::ARRAY_BUFFER, 1);
-            //     gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 2);
-            //     let pos_attr = gl::GetAttribLocation(self.program, gl_str!("position"));
-            //     gl::EnableVertexAttribArray(pos_attr as GLuint);
-            //     gl::VertexAttribPointer(
-            //             pos_attr as GLuint, VERTEX_POS_SIZE as i32, gl::FLOAT,
-            //             gl::FALSE as GLboolean, float_size!(VERTEX_SIZE, GLsizei), ptr::null());
-            //     let color_attr = gl::GetAttribLocation(self.program, gl_str!("color"));
-            //     gl::EnableVertexAttribArray(color_attr as GLuint);
-            //     gl::VertexAttribPointer(
-            //             color_attr as GLuint, VERTEX_COLOR_SIZE as i32, gl::FLOAT,
-            //             gl::FALSE as GLboolean, float_size!(VERTEX_SIZE, GLsizei),
-            //             float_size!(VERTEX_POS_SIZE, CVoid));
-            // }
         }
-        // if match (self.bound_vbo, vbo) {
-        //         (Some(vbo1), Some(vbo2)) => vbo1 != vbo2,
-        //         (None, Some(_)) => true,
-        //         (_, None) => false, } {
-        //     match vao {
-        //         Some(vao1) => { gl::BindVertexArray(vao1) },
-        //         None => (),
-        //     };
-        //     self.bound_vbo = vbo;
-        //     println!("Switching VBO buffers to {}...", vbo.unwrap());
-        //     gl::BindBuffer(gl::ARRAY_BUFFER, vbo.unwrap());
-        // }
-
-        // if match (self.bound_ebo, ebo) {
-        //         (Some(ebo1), Some(ebo2)) => ebo1 != ebo2,
-        //         (None, Some(_)) => true,
-        //         (_, None) => false, } {
-        //     self.bound_ebo = ebo;
-        //     println!("Switching EBO buffers to {}...", ebo.unwrap());
-        //     gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo.unwrap());
-        // }
     } }
 
     // Initializes a managed empty VBO of size BUFFER_SIZE and adds it to the vector of VBOs. This
@@ -422,27 +377,11 @@ impl GameWindow {
         let working_vao = self.working_vao.clone();
         self.bind_vao_checked(working_vao);
         let mut vbo = 0;
-        // let mut vao = 0;
-        // gl::GenVertexArrays(1, &mut vao);
-        // gl::GenBuffers(1, &mut vbo);
-        // println!("generated VAO: {}, VBO: {}", vao, vbo);
-        // self.bind_buffers_checked(Some(vao), Some(vbo), None);
         gl::GenBuffers(1, &mut vbo);
-        println!("generated VBO: {}", vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl::BufferData(
                 gl::ARRAY_BUFFER, float_size!(BUFFER_SIZE, GLsizeiptr),
                 0 as CVoid, gl::STATIC_DRAW);
-        // let pos_attr = gl::GetAttribLocation(self.program, gl_str!("position"));
-        // gl::EnableVertexAttribArray(pos_attr as GLuint);
-        // gl::VertexAttribPointer(
-        //         pos_attr as GLuint, VERTEX_POS_SIZE as i32, gl::FLOAT, gl::FALSE as GLboolean,
-        //         float_size!(VERTEX_SIZE, GLsizei), ptr::null());
-        // let color_attr = gl::GetAttribLocation(self.program, gl_str!("color"));
-        // gl::EnableVertexAttribArray(color_attr as GLuint);
-        // gl::VertexAttribPointer(
-        //         color_attr as GLuint, VERTEX_COLOR_SIZE as i32, gl::FLOAT, gl::FALSE as GLboolean,
-        //         float_size!(VERTEX_SIZE, GLsizei), float_size!(VERTEX_POS_SIZE, CVoid));
         self.vbos.push((vbo, 0));
         let size = if self.vaos.is_empty() { 0 } else { self.vaos[0].len() };
         self.vaos.push(vec![None; size]);
@@ -455,7 +394,6 @@ impl GameWindow {
         self.bind_vao_checked(working_vao);
         let mut ebo = 0;
         gl::GenBuffers(1, &mut ebo);
-        println!("generated EBO: {}", ebo);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
         gl::BufferData(
                 gl::ELEMENT_ARRAY_BUFFER, uint_size!(BUFFER_SIZE, GLsizeiptr),
@@ -740,44 +678,6 @@ impl GameWindow {
         }
         self.ebos[ebo_index] = (ebo_pair.0, ebo_pair.1 + elements.len());
         self.vbos[vbo_index] = (vbo_pair.0, vbo_pair.1 + vertices.len());
-
-        // let vbo_pair = self.vbos[vbo_index];
-        // let buffer_info = match ebo_index {
-        //     None => BufferInfo {
-        //             start: vbo_pair.2 / VERTEX_SIZE, size: vertices.len() / VERTEX_SIZE,
-        //             gen: self.gen, vao: vbo_pair.0, vbo: vbo_pair.1, ebo: None },
-        //     Some(i) => BufferInfo {
-        //             start: self.ebos[i].1, size: info.elements.as_ref().unwrap().len(),
-        //             gen: self.gen, vao: vbo_pair.0, vbo: vbo_pair.1, ebo: Some(self.ebos[i].0) },
-        // };
-        // self.bind_buffers_checked(Some(buffer_info.vao), Some(buffer_info.vbo), buffer_info.ebo);
-        // info.buffer_info.set(Some(buffer_info));
-        // println!("Mapping EBO {} for COLOR: ({}, {}, {}), START: {}, SIZE: {}, V0: {}", buffer_info.ebo.unwrap(), info.color.r, info.color.g, info.color.b, buffer_info.start, buffer_info.size, (vbo_pair.2 as GLuint / VERTEX_SIZE as GLuint));
-
-        // if let Some(i) = ebo_index {
-            
-        //     let ebo_pair = self.ebos[i];
-        //     let mut elements: Vec<GLuint> = Vec::new();
-        //     for elem in info.elements.as_ref().unwrap() {
-        //         elements.push(elem.clone() + (vbo_pair.2 as GLuint / VERTEX_SIZE as GLuint));
-        //     }
-            // println!("Elements: {:?}", elements);
-            // unsafe {
-            //     self.bind_vao_checked(self.working_vao);
-            //     gl::BufferSubData(
-            //             gl::ELEMENT_ARRAY_BUFFER, uint_size!(ebo_pair.1, GLintptr),
-            //             uint_size!(elements.len(), GLsizeiptr), vec_to_addr!(elements));
-            // }
-            // self.ebos[i] = (ebo_pair.0, ebo_pair.1 + elements.len());
-        // }
-
-        // println!("        Mapping VBO {} for COLOR: ({}, {}, {}), START: {}, SIZE: {}", buffer_info.vbo, info.color.r, info.color.g, info.color.b, vbo_pair.2, vertices.len());
-        // unsafe {
-        //     gl::BufferSubData(
-        //             gl::ARRAY_BUFFER, float_size!(vbo_pair.2, GLintptr),
-        //             float_size!(vertices.len(), GLsizeiptr), vec_to_addr!(vertices));
-        // }
-        // self.vbos[vbo_index] = (vbo_pair.0, vbo_pair.1, vbo_pair.2 + vertices.len());
     }
 
     // Clears the VBO/VAO/EBOs so that every ModelInfo currently mapped to the engine's VBO space
@@ -835,13 +735,8 @@ impl GameWindow {
             gl::UniformMatrix4fv(
                     gl::GetUniformLocation(self.program, gl_str!("transform")), 1,
                     gl::FALSE as GLboolean, transform.as_mut_ptr());
-            // println!("DRAWING START: {}, SIZE: {}", info.start, info.size);
             gl::DrawElements(gl::TRIANGLES, info.size as i32,
                     gl::UNSIGNED_INT, uint_size!(info.start, CVoid));
-            // match instance.info.elements {
-            //     None => { gl::DrawArrays(gl::TRIANGLES, info.start as i32, info.size as i32); },
-            //     Some(_) => {  },
-            // }
         }
     }
 }
@@ -876,7 +771,6 @@ fn main() {
         boxes.push(ModelInstance::from(bb.clone()));
         boxes.last_mut().unwrap().pos = Vector3D::new(6.0, i as f32 * 1.5, 0.0);
     }
-    // let mut box_instance = ModelInstance::from(box_info.clone());
 
     let mut left_pressed = 0;
     let mut right_pressed = 0;
