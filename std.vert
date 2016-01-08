@@ -1,6 +1,8 @@
 #version 150
 
 in vec3 position;
+in vec3 normal;
+in vec2 tcoord;
 in vec4 color;
 
 out vec4 Color;

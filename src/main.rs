@@ -13,7 +13,7 @@ extern crate time;
 use cgmath::{Point, Matrix, EuclideanVector};
 use gl::types::*;
 use glutin::{Window, Event, VirtualKeyCode, ElementState};
-use mmo::util::shader;
+use mmo::util::{shader, obj};
 use std::cell::Cell;
 use std::ffi::CString;
 use std::mem;
@@ -34,9 +34,13 @@ pub type Quaternion = cgmath::Quaternion<GLfloat>;
 const BUFFER_SIZE: usize = 65535;
 
 // Contents of a VBO.
+// [P_x  P_y  P_z  N_x  N_y  N_z  T_u  T_v  C_r  C_g  C_b  C_a]
 const VERTEX_POS_SIZE: usize = 3;
+const VERTEX_NORMAL_SIZE: usize = 3;
+const VERTEX_TCOORD_SIZE: usize = 2;
 const VERTEX_COLOR_SIZE: usize = 4;
-const VERTEX_SIZE: usize = VERTEX_POS_SIZE + VERTEX_COLOR_SIZE;
+const VERTEX_SIZE: usize = VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE +
+        VERTEX_TCOORD_SIZE + VERTEX_COLOR_SIZE;
 
 // Represents a color in RGBA with intensity values from 0.0 to 1.0.
 pub struct Color {
@@ -85,15 +89,15 @@ pub struct BufferInfo {
     pub gen: usize,
     pub start: usize,
     pub size: usize,
-    // pub vbo: GLuint,
     pub vao: GLuint,
-    // pub ebo: GLuint,
 }
 
 // Stores information about the model which can be instantiated to create a ModelInstance. 
 pub struct ModelInfo {
     pub vertices: Vec<GLfloat>,
+    pub normals: Vec<GLfloat>,
     pub elements: Vec<GLuint>,
+    pub tcoords: Vec<GLfloat>,
     pub color: Color,
     pub mat: Material,
     pub buffer_info: Cell<Option<BufferInfo>>,
@@ -101,71 +105,21 @@ pub struct ModelInfo {
 
 impl ModelInfo {
     // Default constructor with color initialized to <1.0, 1.0, 1.0, 1.0>.
-    pub fn new(vertices: Vec<GLfloat>, elems: Vec<GLuint>, mat: Material) -> ModelInfo {
-        ModelInfo::new_with_color(vertices, elems, Color::new_rgb(1.0, 1.0, 1.0), mat)
+    pub fn new(vertices: Vec<GLfloat>, elems: Vec<GLuint>, normals: Vec<GLfloat>,
+            tcoords: Vec<GLfloat>, mat: Material) -> ModelInfo {
+        ModelInfo::new_with_color(vertices, elems, normals, tcoords,
+                    Color::new_rgb(1.0, 1.0, 1.0), mat)
     }
 
     // Constructor to create a ModelInfo with a Color.
-    pub fn new_with_color(vertices: Vec<GLfloat>, elems: Vec<GLuint>, color: Color,
-            mat: Material) -> ModelInfo {
-        ModelInfo { vertices: vertices, elements: elems, color: color, mat: mat,
-                buffer_info: Cell::new(None) }
+    pub fn new_with_color(vertices: Vec<GLfloat>, elems: Vec<GLuint>, normals: Vec<GLfloat>,
+            tcoords: Vec<GLfloat>, color: Color, mat: Material) -> ModelInfo {
+        ModelInfo { vertices: vertices, normals: normals, elements: elems, tcoords: tcoords,
+                color: color, mat: mat, buffer_info: Cell::new(None) }
     }
 
     // Creates a box with specified size and color.
     pub fn new_box(scale_x: f32, scale_y: f32, scale_z: f32, color: Color) -> ModelInfo {
-        let vertices: Vec<GLfloat> = vec![
-                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-
-                -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-                 0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-                -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-                -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-
-                -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-                -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-                -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-
-                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-                 0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-
-                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-                 0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-                -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-
-                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-                -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z
-        ];
-        let mut elements: Vec<GLuint> = Vec::new();
-        for i in 0..vertices.len() {
-            elements.push(i as GLuint);
-        }
-        ModelInfo::new_with_color(vertices, elements, color, Material::new())
-    }
-
-    // Creates a box with specified size and color.
-    pub fn new_box_elems(scale_x: f32, scale_y: f32, scale_z: f32, color: Color) -> ModelInfo {
         let vertices: Vec<GLfloat> = vec![
                 -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
                  0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
@@ -181,7 +135,34 @@ impl ModelInfo {
                 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4, 7, 3, 0, 0, 4, 7, 6, 2, 1, 1, 5, 6, 0,
                 1, 5, 5, 4, 0, 3, 2, 6, 6, 7, 8,
         ];
-        ModelInfo::new_with_color(vertices, elements, color, Material::new())
+        let normals: Vec<GLfloat> = vec![0.0; 9 * 3];
+        let uvs: Vec<GLfloat> = vec![0.0; 9 * 2];
+        ModelInfo::new_with_color(vertices, elements, normals, uvs, color, Material::new())
+    }
+
+    // Gets a single vector representing the the ModelInfo in VBO format.
+    pub fn get_vbo_format(&self) -> Vec<GLfloat> {
+        let mut vertices: Vec<GLfloat> = Vec::new();
+        let mut y = 0;
+        for x in 0..self.vertices.len() {
+            if x % 3 != 0 {
+                continue;
+            }
+            vertices.push(self.vertices[x]);
+            vertices.push(self.vertices[x + 1]);
+            vertices.push(self.vertices[x + 2]);
+            vertices.push(self.normals[x]);
+            vertices.push(self.normals[x + 1]);
+            vertices.push(self.normals[x + 2]);
+            vertices.push(self.tcoords[y]);
+            vertices.push(self.tcoords[y + 1]);
+            vertices.push(self.color.r);
+            vertices.push(self.color.g);
+            vertices.push(self.color.b);
+            vertices.push(self.color.a);
+            y += 2;
+        }
+        vertices
     }
 }
 
@@ -421,12 +402,25 @@ impl GameWindow {
                 gl::VertexAttribPointer(
                         pos_attr as GLuint, VERTEX_POS_SIZE as i32, gl::FLOAT,
                         gl::FALSE as GLboolean, float_size!(VERTEX_SIZE, GLsizei), ptr::null());
+                let normal_attr = gl::GetAttribLocation(self.program, gl_str!("normal"));
+                gl::EnableVertexAttribArray(normal_attr as GLuint);
+                gl::VertexAttribPointer(
+                        normal_attr as GLuint, VERTEX_NORMAL_SIZE as i32, gl::FLOAT,
+                        gl::FALSE as GLboolean, float_size!(VERTEX_SIZE, GLsizei),
+                        float_size!(VERTEX_POS_SIZE, CVoid));
+                let tcoord_attr = gl::GetAttribLocation(self.program, gl_str!("tcoord"));
+                gl::EnableVertexAttribArray(tcoord_attr as GLuint);
+                gl::VertexAttribPointer(
+                        tcoord_attr as GLuint, VERTEX_TCOORD_SIZE as i32, gl::FLOAT,
+                        gl::FALSE as GLboolean, float_size!(VERTEX_SIZE, GLsizei),
+                        float_size!(VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE, CVoid));
                 let color_attr = gl::GetAttribLocation(self.program, gl_str!("color"));
                 gl::EnableVertexAttribArray(color_attr as GLuint);
                 gl::VertexAttribPointer(
                         color_attr as GLuint, VERTEX_COLOR_SIZE as i32, gl::FLOAT,
                         gl::FALSE as GLboolean, float_size!(VERTEX_SIZE, GLsizei),
-                        float_size!(VERTEX_POS_SIZE, CVoid));
+                        float_size!(VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE + VERTEX_TCOORD_SIZE,
+                        CVoid));
                 vao
             },
         }
@@ -607,19 +601,7 @@ impl GameWindow {
 
     // Maps/remaps a given Rc<ModelInfo> to VBO and EBO locations in the engine's managed buffers.
     pub fn map_vbo(&mut self, info: Rc<ModelInfo>) {
-        let mut vertices: Vec<GLfloat> = Vec::new();
-        for x in 0..info.vertices.len() {
-            if x % 3 != 0 {
-                continue;
-            }
-            vertices.push(info.vertices[x]);
-            vertices.push(info.vertices[x + 1]);
-            vertices.push(info.vertices[x + 2]);
-            vertices.push(info.color.r);
-            vertices.push(info.color.g);
-            vertices.push(info.color.b);
-            vertices.push(info.color.a);
-        }
+        let vertices = info.get_vbo_format();
         // Find empty EBO space.
         let ebo_index = {
             let mut index = None;
@@ -743,6 +725,9 @@ impl GameWindow {
 
 // Driver test program.
 fn main() {
+    obj::decode_obj("bunny.obj").unwrap();
+    process::exit(0);
+
     let mut window = GameWindow::new(800, 600, "Engine Test".to_string()).unwrap();
     let camera1 = PerspectiveCamera::new(
             Vector3D::new(7.0, 7.0, 7.0), Vector3D::new(0.0, 0.0, 0.0), window.get_aspect_ratio(),
@@ -753,11 +738,11 @@ fn main() {
     let main_camera = window.attach_camera(camera1);
     let secondary_camera = window.attach_camera(camera2);
     window.set_active_camera(main_camera).unwrap();
-    let rb = Rc::new(ModelInfo::new_box_elems(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
-    let ob = Rc::new(ModelInfo::new_box_elems(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
-    let yb = Rc::new(ModelInfo::new_box_elems(1.0, 1.0, 1.0, Color::new_rgb(1.0, 1.0, 0.0)));
-    let gb = Rc::new(ModelInfo::new_box_elems(1.0, 1.0, 1.0, Color::new_rgb(0.0, 1.0, 0.0)));
-    let bb = Rc::new(ModelInfo::new_box_elems(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 1.0)));
+    let rb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
+    let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
+    let yb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 1.0, 0.0)));
+    let gb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 1.0, 0.0)));
+    let bb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 1.0)));
     let mut boxes = Vec::new();
     for i in 0..5 {
         boxes.push(ModelInstance::from(rb.clone()));
