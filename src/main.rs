@@ -15,6 +15,7 @@ use gl::types::*;
 use glutin::{Window, Event, VirtualKeyCode, ElementState};
 use mmo::util::{shader, obj};
 use std::cell::Cell;
+use std::cmp;
 use std::ffi::CString;
 use std::mem;
 use std::process;
@@ -31,7 +32,7 @@ pub type Vector3D = cgmath::Vector3<GLfloat>;
 pub type Quaternion = cgmath::Quaternion<GLfloat>;
 
 // Number of elements in a VBO or EBO.
-const BUFFER_SIZE: usize = 65535;
+const BUFFER_SIZE: usize = 65535 * 4;
 
 // Contents of a VBO.
 // [P_x  P_y  P_z  N_x  N_y  N_z  T_u  T_v  C_r  C_g  C_b  C_a]
@@ -138,6 +139,30 @@ impl ModelInfo {
         let normals: Vec<GLfloat> = vec![0.0; 9 * 3];
         let uvs: Vec<GLfloat> = vec![0.0; 9 * 2];
         ModelInfo::new_with_color(vertices, elements, normals, uvs, color, Material::new())
+    }
+
+    // Creates an ModelInfo from the result of a OBJ decoding.
+    pub fn from_obj(object: &obj::DecodedOBJ, color: Color) -> ModelInfo {
+        let mut vertices: Vec<GLfloat> = Vec::new();
+        let mut normals: Vec<GLfloat> = Vec::new();
+        let mut tcoords: Vec<GLfloat> = Vec::new();
+        let mut elements: Vec<GLuint> = Vec::new();
+        for vertex in &object.vertices {
+            vertices.push(vertex.pos.x);
+            vertices.push(vertex.pos.y);
+            vertices.push(vertex.pos.z);
+            normals.push(vertex.norm.x);
+            normals.push(vertex.norm.y);
+            normals.push(vertex.norm.z);
+            tcoords.push(vertex.tc.x);
+            tcoords.push(vertex.tc.y);
+        }
+        for element in &object.elements {
+            elements.push(element.0);
+            elements.push(element.1);
+            elements.push(element.2);
+        }
+        ModelInfo::new_with_color(vertices, elements, normals, tcoords, color, Material::new())
     }
 
     // Gets a single vector representing the the ModelInfo in VBO format.
@@ -296,8 +321,8 @@ pub struct GameWindow {
     working_vao: GLuint,
     bound_vao: Option<GLuint>,
     vaos: Vec<Vec<Option<GLuint>>>,
-    vbos: Vec<(GLuint, usize)>, // (vbo_id, size)
-    ebos: Vec<(GLuint, usize)>, // (ebo_id, size)
+    vbos: Vec<(GLuint, usize, usize)>, // (vbo_id, size, max_size)
+    ebos: Vec<(GLuint, usize, usize)>, // (ebo_id, size, max_size)
 
 }
 
@@ -329,8 +354,8 @@ impl GameWindow {
             let fs = shader::compile_shader("std.frag", gl::FRAGMENT_SHADER);
             window.program = shader::link_program(vs, fs);
             gl::GenVertexArrays(1, &mut window.working_vao);
-            window.initialize_vbo();
-            window.initialize_ebo();
+            window.initialize_vbo(0);
+            window.initialize_ebo(0);
             gl::Enable(gl::DEPTH_TEST);
             gl::UseProgram(window.program);
             gl::BindFragDataLocation(window.program, 0, gl_str!("out_color"));
@@ -353,33 +378,39 @@ impl GameWindow {
     } }
 
     // Initializes a managed empty VBO of size BUFFER_SIZE and adds it to the vector of VBOs. This
-    // also adds an uninitialized row to the VAOs data structure.
-    fn initialize_vbo(&mut self) { unsafe {
+    // also adds an uninitialized row to the VAOs data structure. This takes a max argument to
+    // still not fail on creation even if we create a VBO for greater than BUFFER_SIZE elems.
+    fn initialize_vbo(&mut self, max: usize) { unsafe {
+        let buffer_size = cmp::max(max, BUFFER_SIZE);
         let working_vao = self.working_vao.clone();
         self.bind_vao_checked(working_vao);
         let mut vbo = 0;
         gl::GenBuffers(1, &mut vbo);
+        println!("initializing vbo {}", vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl::BufferData(
-                gl::ARRAY_BUFFER, float_size!(BUFFER_SIZE, GLsizeiptr),
+                gl::ARRAY_BUFFER, float_size!(buffer_size, GLsizeiptr),
                 0 as CVoid, gl::STATIC_DRAW);
-        self.vbos.push((vbo, 0));
+        self.vbos.push((vbo, 0, buffer_size));
         let size = if self.vaos.is_empty() { 0 } else { self.vaos[0].len() };
         self.vaos.push(vec![None; size]);
     }}
 
     // Initializes a managed empty EBO of size BUFFER_SIZE and adds it to the vector of EBOs. This
-    // also adds an uninitialized column to the VAOs data structure.
-    fn initialize_ebo(&mut self) { unsafe {
+    // also adds an uninitialized column to the VAOs data structure. This takes a max argument to
+    // still not fail on creation even if we create a EBO for greater than BUFFER_SIZE elems.
+    fn initialize_ebo(&mut self, max: usize) { unsafe {
+        let buffer_size = cmp::max(max, BUFFER_SIZE);
         let working_vao = self.working_vao.clone();
         self.bind_vao_checked(working_vao);
         let mut ebo = 0;
         gl::GenBuffers(1, &mut ebo);
+        println!("initializing ebo: {}", ebo);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
         gl::BufferData(
-                gl::ELEMENT_ARRAY_BUFFER, uint_size!(BUFFER_SIZE, GLsizeiptr),
+                gl::ELEMENT_ARRAY_BUFFER, uint_size!(buffer_size, GLsizeiptr),
                 0 as CVoid, gl::STATIC_DRAW);
-        self.ebos.push((ebo, 0));
+        self.ebos.push((ebo, 0, buffer_size));
         for vao_vec in self.vaos.iter_mut() {
             vao_vec.push(None);
         }
@@ -606,14 +637,14 @@ impl GameWindow {
         let ebo_index = {
             let mut index = None;
             for (i, ebo_pair) in self.ebos.iter().enumerate() {
-                if info.elements.len() < BUFFER_SIZE - ebo_pair.1 {
+                if info.elements.len() < ebo_pair.2 - ebo_pair.1 {
                     index = Some(i);
                     break;
                 }
             }
             match index {
                 None => {
-                    self.initialize_ebo();
+                    self.initialize_ebo(info.elements.len() + 1);
                     self.ebos.len() - 1
                 },
                 Some(i) => i,
@@ -624,14 +655,14 @@ impl GameWindow {
         let vbo_index = {
             let mut index = None;
             for (i, vbo_pair) in self.vbos.iter().enumerate() {
-                if vertices.len() < BUFFER_SIZE - vbo_pair.1 {
+                if vertices.len() < vbo_pair.2 - vbo_pair.1 {
                     index = Some(i);
                     break;
                 }
             }
             match index {
                 None => {
-                    self.initialize_vbo();
+                    self.initialize_vbo(vertices.len() + 1);
                     self.vbos.len() - 1
                 },
                 Some(i) => i,
@@ -641,6 +672,8 @@ impl GameWindow {
         let vao = self.initialize_vao(vbo_index, ebo_index);
         let vbo_pair = self.vbos[vbo_index];
         let ebo_pair = self.ebos[ebo_index];
+                println!("Mapped LEN: {} to VBO: {}, EBO: {}, VAO: {}", vertices.len(), vbo_pair.0, ebo_pair.0, vao);
+
         let mut elements: Vec<GLuint> = Vec::new();
         for elem in &info.elements {
             elements.push(elem.clone() + (vbo_pair.1 as GLuint / VERTEX_SIZE as GLuint));
@@ -658,8 +691,8 @@ impl GameWindow {
                     gl::ARRAY_BUFFER, float_size!(vbo_pair.1, GLintptr),
                     float_size!(vertices.len(), GLsizeiptr), vec_to_addr!(vertices));
         }
-        self.ebos[ebo_index] = (ebo_pair.0, ebo_pair.1 + elements.len());
-        self.vbos[vbo_index] = (vbo_pair.0, vbo_pair.1 + vertices.len());
+        self.ebos[ebo_index] = (ebo_pair.0, ebo_pair.1 + elements.len(), ebo_pair.2);
+        self.vbos[vbo_index] = (vbo_pair.0, vbo_pair.1 + vertices.len(), vbo_pair.2);
     }
 
     // Clears the VBO/VAO/EBOs so that every ModelInfo currently mapped to the engine's VBO space
@@ -669,10 +702,10 @@ impl GameWindow {
         self.bind_vao_checked(working_vao);
         self.gen += 1;
         for vbo_pair in self.vbos.iter_mut() {
-            *vbo_pair = (vbo_pair.0, 0);
+            *vbo_pair = (vbo_pair.0, 0, vbo_pair.2);
         }
         for ebo_pair in self.ebos.iter_mut() {
-            *ebo_pair = (ebo_pair.0, 0);
+            *ebo_pair = (ebo_pair.0, 0, ebo_pair.2);
         }
         for row in self.vaos.iter_mut() {
             for column in row.iter_mut() {
@@ -725,9 +758,7 @@ impl GameWindow {
 
 // Driver test program.
 fn main() {
-    obj::decode_obj("bunny.obj").unwrap();
-    process::exit(0);
-
+    let bunny = obj::decode_obj("bunny.obj").unwrap();
     let mut window = GameWindow::new(800, 600, "Engine Test".to_string()).unwrap();
     let camera1 = PerspectiveCamera::new(
             Vector3D::new(7.0, 7.0, 7.0), Vector3D::new(0.0, 0.0, 0.0), window.get_aspect_ratio(),
@@ -738,24 +769,32 @@ fn main() {
     let main_camera = window.attach_camera(camera1);
     let secondary_camera = window.attach_camera(camera2);
     window.set_active_camera(main_camera).unwrap();
-    let rb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
+    let bunny_info = Rc::new(ModelInfo::from_obj(&bunny, Color::new_rgb(1.0, 0.0, 0.0)));
+    println!("SIZE: {}", bunny.vertices.len());
+    let mut bunny_inst = ModelInstance::from(bunny_info.clone());
+    bunny_inst.scale = 10.0;
+    bunny_inst.pos = Vector3D::new(0.0, 0.0, 2.0);
+
     let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
-    let yb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 1.0, 0.0)));
-    let gb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 1.0, 0.0)));
-    let bb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 1.0)));
-    let mut boxes = Vec::new();
-    for i in 0..5 {
-        boxes.push(ModelInstance::from(rb.clone()));
-        boxes.last_mut().unwrap().pos = Vector3D::new(0.0, i as f32 * 1.5, 0.0);
-        boxes.push(ModelInstance::from(ob.clone()));
-        boxes.last_mut().unwrap().pos = Vector3D::new(1.5, i as f32 * 1.5, 0.0);
-        boxes.push(ModelInstance::from(yb.clone()));
-        boxes.last_mut().unwrap().pos = Vector3D::new(3.0, i as f32 * 1.5, 0.0);
-        boxes.push(ModelInstance::from(gb.clone()));
-        boxes.last_mut().unwrap().pos = Vector3D::new(4.5, i as f32 * 1.5, 0.0);
-        boxes.push(ModelInstance::from(bb.clone()));
-        boxes.last_mut().unwrap().pos = Vector3D::new(6.0, i as f32 * 1.5, 0.0);
-    }
+    let ob_inst = ModelInstance::from(ob.clone());
+    // let rb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
+    // let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
+    // let yb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 1.0, 0.0)));
+    // let gb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 1.0, 0.0)));
+    // let bb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 1.0)));
+    // let mut boxes = Vec::new();
+    // for i in 0..5 {
+    //     boxes.push(ModelInstance::from(rb.clone()));
+    //     boxes.last_mut().unwrap().pos = Vector3D::new(0.0, i as f32 * 1.5, 0.0);
+    //     boxes.push(ModelInstance::from(ob.clone()));
+    //     boxes.last_mut().unwrap().pos = Vector3D::new(1.5, i as f32 * 1.5, 0.0);
+    //     boxes.push(ModelInstance::from(yb.clone()));
+    //     boxes.last_mut().unwrap().pos = Vector3D::new(3.0, i as f32 * 1.5, 0.0);
+    //     boxes.push(ModelInstance::from(gb.clone()));
+    //     boxes.last_mut().unwrap().pos = Vector3D::new(4.5, i as f32 * 1.5, 0.0);
+    //     boxes.push(ModelInstance::from(bb.clone()));
+    //     boxes.last_mut().unwrap().pos = Vector3D::new(6.0, i as f32 * 1.5, 0.0);
+    // }
 
     let mut left_pressed = 0;
     let mut right_pressed = 0;
@@ -791,17 +830,20 @@ fn main() {
         }
 
         // Update Objects.
-        let mut count = 0.0;
-        for elem in &mut boxes {
-            elem.scale = 0.5 + (((
-                    elapsed_time * 10.0 + (((count % 5.0) / 4.0) * 3.1415)).sin() + 1.0) / 3.0);
-            count += 1.0;
-        }
+        // let mut count = 0.0;
+        // for elem in &mut boxes {
+        //     elem.scale = 0.5 + (((
+        //             elapsed_time * 10.0 + (((count % 5.0) / 4.0) * 3.1415)).sin() + 1.0) / 3.0);
+        //     count += 1.0;
+        // }
 
+        // Draw Objects.
         window.clear();
-        for elem in &boxes {
-            window.draw_instance(&elem);
-        }
+        window.draw_instance(&bunny_inst);
+        window.draw_instance(&ob_inst);
+        // for elem in &boxes {
+        //     window.draw_instance(&elem);
+        // }
         window.swap_buffers();
 
         for event in window.poll_events() {
