@@ -198,6 +198,8 @@ pub struct ModelInstance {
     pub pos: Vector3D,
     pub rot: Quaternion,
     pub scale: f32,
+    pub model: cgmath::Matrix4<GLfloat>,
+    pub normal: cgmath::Matrix4<GLfloat>,
 }
 
 impl ModelInstance {
@@ -206,7 +208,20 @@ impl ModelInstance {
         let pos = Vector3D::new(0.0, 0.0, 0.0);
         let rot = Quaternion::new(1.0, 0.0, 0.0, 0.0);
         let scale = 1.0;
-        ModelInstance { info: info, pos: pos, scale: scale, rot: rot }
+        let model = cgmath::Matrix4::from(cgmath::Decomposed {
+                scale: scale, rot: rot, disp: pos });
+        let norm = model.clone().invert().unwrap().transpose();
+        ModelInstance { info: info, pos: pos, scale: scale, rot: rot, model: model, normal: norm }
+    }
+
+    // Updates the model and normal matrices. This must be called after any sequence of struct
+    // field changes for the changes to appear in-world.
+    pub fn update(&mut self) {
+        let model = cgmath::Matrix4::from(cgmath::Decomposed {
+                scale: self.scale, rot: self.rot, disp: self.pos });
+        let normal = model.clone().invert().unwrap().transpose();
+        self.model = model;
+        self.normal = normal;
     }
 }
 
@@ -732,36 +747,32 @@ impl GameWindow {
             Some(i) => { if i.gen != self.gen { self.map_vbo(instance.info.clone()) }; },
         }
 
-        // Possible speedup: precompute model matrix and just check if the model has been updated.
-        let mut model = cgmath::Matrix4::from(cgmath::Decomposed {
-                scale: instance.scale, rot: instance.rot, disp: instance.pos });
-        let mut normal = model.clone().invert().unwrap().transpose();
-        let mut transform = {
+        let transform = {
             let camera = match self.active_camera {
                 None => { return; },
                 Some(c) => self.cameras[c].as_ref().unwrap(),
             };
             let view = camera.get_view_matrix();
             let proj = camera.get_projection_matrix();
-            proj * view * model
+            proj * view * instance.model
         };
 
-        let mut light_intensity = vec![1.0, 1.0, 1.0];
+        let light_intensity = vec![1.0, 1.0, 1.0];
         unsafe {
             let info = instance.info.buffer_info.get().unwrap();
             self.bind_vao_checked(info.vao);
             gl::UniformMatrix4fv(
                     gl::GetUniformLocation(self.program, gl_str!("transform")), 1,
-                    gl::FALSE as GLboolean, transform.as_mut_ptr());
+                    gl::FALSE as GLboolean, transform.as_ptr());
             gl::UniformMatrix4fv(
                     gl::GetUniformLocation(self.program, gl_str!("model")), 1,
-                    gl::FALSE as GLboolean, model.as_mut_ptr());
+                    gl::FALSE as GLboolean, instance.model.as_ptr());
             gl::UniformMatrix4fv(
                     gl::GetUniformLocation(self.program, gl_str!("normal")), 1,
-                    gl::FALSE as GLboolean, normal.as_mut_ptr());
+                    gl::FALSE as GLboolean, instance.normal.as_ptr());
             gl::Uniform3fv(
                     gl::GetUniformLocation(self.program, gl_str!("light.intensity")), 1,
-                    light_intensity.as_mut_ptr());
+                    light_intensity.as_ptr());
             gl::DrawElements(gl::TRIANGLES, info.size as i32,
                     gl::UNSIGNED_INT, uint_size!(info.start, CVoid));
         }
@@ -789,24 +800,29 @@ fn main() {
     let mut bunny_inst = ModelInstance::from(bunny_info.clone());
     bunny_inst.scale = 30.0;
     bunny_inst.pos = Vector3D::new(-4.0, 4.0, 1.0);
+    bunny_inst.update();
 
 
     let ground_info = Rc::new(ModelInfo::from_obj(&ground, Color::new_rgb(1.0, 1.0, 1.0)));
     let mut ground_inst = ModelInstance::from(ground_info.clone());
     ground_inst.scale = 3.0;
     ground_inst.pos = Vector3D::new(0.0, 0.0, -2.0);
+    ground_inst.update();
 
     let dragon_info = Rc::new(ModelInfo::from_obj(&dragon, Color::new_rgb(0.0, 1.0, 0.0)));
     let mut dragon_inst = ModelInstance::from(dragon_info.clone());
     dragon_inst.scale = 0.6;
     dragon_inst.pos = Vector3D::new(4.0, -4.0, 0.0);
+    dragon_inst.update();
 
     let budda_info = Rc::new(ModelInfo::from_obj(&budda, Color::new_rgb(0.0, 0.0, 1.0)));
     let mut budda_inst = ModelInstance::from(budda_info.clone());
     // budda_inst.pos = Vector3D::new(3.5, 3.5, 1.0);
+    budda_inst.update();
 
     let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 0.0)));
     let mut ob_inst = ModelInstance::from(ob.clone());
+    ob_inst.update();
     // let rb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
     // let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
     // let yb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 1.0, 0.0)));
@@ -861,11 +877,12 @@ fn main() {
 
         // Update Objects.
         ob_inst.pos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 0.0);
-        let mut lpos = vec![10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 0.0];
+        ob_inst.update();
+        let lpos = vec![10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 0.0];
         unsafe {
             gl::Uniform3fv(
                     gl::GetUniformLocation(window.program, gl_str!("light.position")), 1,
-                    lpos.as_mut_ptr());
+                    lpos.as_ptr());
         }
         // let mut count = 0.0;
         // for elem in &mut boxes {
