@@ -10,7 +10,7 @@ extern crate glutin;
 extern crate gl;
 extern crate time;
 
-use cgmath::{Point, Matrix, EuclideanVector};
+use cgmath::{Point, Matrix, EuclideanVector, SquareMatrix};
 use gl::types::*;
 use glutin::{Window, Event, VirtualKeyCode, ElementState};
 use mmo::util::{shader, obj};
@@ -732,24 +732,36 @@ impl GameWindow {
             Some(i) => { if i.gen != self.gen { self.map_vbo(instance.info.clone()) }; },
         }
 
+        // Possible speedup: precompute model matrix and just check if the model has been updated.
+        let mut model = cgmath::Matrix4::from(cgmath::Decomposed {
+                scale: instance.scale, rot: instance.rot, disp: instance.pos });
+        let mut normal = model.clone().invert().unwrap().transpose();
         let mut transform = {
             let camera = match self.active_camera {
                 None => { return; },
                 Some(c) => self.cameras[c].as_ref().unwrap(),
             };
-            let model = cgmath::Matrix4::from(cgmath::Decomposed {
-                    scale: instance.scale, rot: instance.rot, disp: instance.pos });
             let view = camera.get_view_matrix();
             let proj = camera.get_projection_matrix();
             proj * view * model
         };
 
+        let mut light_intensity = vec![1.0, 1.0, 1.0];
         unsafe {
             let info = instance.info.buffer_info.get().unwrap();
             self.bind_vao_checked(info.vao);
             gl::UniformMatrix4fv(
                     gl::GetUniformLocation(self.program, gl_str!("transform")), 1,
                     gl::FALSE as GLboolean, transform.as_mut_ptr());
+            gl::UniformMatrix4fv(
+                    gl::GetUniformLocation(self.program, gl_str!("model")), 1,
+                    gl::FALSE as GLboolean, model.as_mut_ptr());
+            gl::UniformMatrix4fv(
+                    gl::GetUniformLocation(self.program, gl_str!("normal")), 1,
+                    gl::FALSE as GLboolean, normal.as_mut_ptr());
+            gl::Uniform3fv(
+                    gl::GetUniformLocation(self.program, gl_str!("light.intensity")), 1,
+                    light_intensity.as_mut_ptr());
             gl::DrawElements(gl::TRIANGLES, info.size as i32,
                     gl::UNSIGNED_INT, uint_size!(info.start, CVoid));
         }
@@ -758,25 +770,43 @@ impl GameWindow {
 
 // Driver test program.
 fn main() {
-    let bunny = obj::decode_obj("bunny.obj").unwrap();
+    let ground = obj::decode_obj("ground.obj").unwrap();
+    let bunny = obj::decode_obj("bunny_smooth.obj").unwrap();
+    let budda = obj::decode_obj("budda.obj").unwrap();
+    let dragon = obj::decode_obj("dragon.obj").unwrap();
     let mut window = GameWindow::new(800, 600, "Engine Test".to_string()).unwrap();
+    window.bg_color = Color::new_rgb(0.5, 0.5, 0.5);
     let camera1 = PerspectiveCamera::new(
-            Vector3D::new(7.0, 7.0, 7.0), Vector3D::new(0.0, 0.0, 0.0), window.get_aspect_ratio(),
+            Vector3D::new(17.0, 17.0, 17.0), Vector3D::new(0.0, 0.0, 0.0), window.get_aspect_ratio(),
             45.0, 1.0, 100.0);
     let camera2 = PerspectiveCamera::new(
-            Vector3D::new(0.00001, 0.0, 10.0), Vector3D::new(0.0, 0.0, 0.0),
+            Vector3D::new(0.00001, 0.0, 30.0), Vector3D::new(0.0, 0.0, 0.0),
             window.get_aspect_ratio(), 45.0, 0.1, 100.0);
     let main_camera = window.attach_camera(camera1);
     let secondary_camera = window.attach_camera(camera2);
     window.set_active_camera(main_camera).unwrap();
     let bunny_info = Rc::new(ModelInfo::from_obj(&bunny, Color::new_rgb(1.0, 0.0, 0.0)));
-    println!("SIZE: {}", bunny.vertices.len());
     let mut bunny_inst = ModelInstance::from(bunny_info.clone());
-    bunny_inst.scale = 10.0;
-    bunny_inst.pos = Vector3D::new(0.0, 0.0, 2.0);
+    bunny_inst.scale = 30.0;
+    bunny_inst.pos = Vector3D::new(-4.0, 4.0, 1.0);
 
-    let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
-    let ob_inst = ModelInstance::from(ob.clone());
+
+    let ground_info = Rc::new(ModelInfo::from_obj(&ground, Color::new_rgb(1.0, 1.0, 1.0)));
+    let mut ground_inst = ModelInstance::from(ground_info.clone());
+    ground_inst.scale = 3.0;
+    ground_inst.pos = Vector3D::new(0.0, 0.0, -2.0);
+
+    let dragon_info = Rc::new(ModelInfo::from_obj(&dragon, Color::new_rgb(0.0, 1.0, 0.0)));
+    let mut dragon_inst = ModelInstance::from(dragon_info.clone());
+    dragon_inst.scale = 0.6;
+    dragon_inst.pos = Vector3D::new(4.0, -4.0, 0.0);
+
+    let budda_info = Rc::new(ModelInfo::from_obj(&budda, Color::new_rgb(0.0, 0.0, 1.0)));
+    let mut budda_inst = ModelInstance::from(budda_info.clone());
+    // budda_inst.pos = Vector3D::new(3.5, 3.5, 1.0);
+
+    let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 0.0)));
+    let mut ob_inst = ModelInstance::from(ob.clone());
     // let rb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
     // let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
     // let yb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 1.0, 0.0)));
@@ -816,7 +846,7 @@ fn main() {
                 window.set_active_camera(main_camera).unwrap();
             } else {
                 window.set_active_camera(secondary_camera).unwrap();
-                window.clear_vertex_buffers();
+                // window.clear_vertex_buffers();
             }
             let x_dir = (right_pressed - left_pressed) as f32 * 5.0 * dt;
             let y_dir = (up_pressed - down_pressed) as f32 * 5.0 * dt;
@@ -830,6 +860,13 @@ fn main() {
         }
 
         // Update Objects.
+        ob_inst.pos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 0.0);
+        let mut lpos = vec![10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 0.0];
+        unsafe {
+            gl::Uniform3fv(
+                    gl::GetUniformLocation(window.program, gl_str!("light.position")), 1,
+                    lpos.as_mut_ptr());
+        }
         // let mut count = 0.0;
         // for elem in &mut boxes {
         //     elem.scale = 0.5 + (((
@@ -841,6 +878,10 @@ fn main() {
         window.clear();
         window.draw_instance(&bunny_inst);
         window.draw_instance(&ob_inst);
+        window.draw_instance(&ground_inst);
+        window.draw_instance(&budda_inst);
+        window.draw_instance(&dragon_inst);
+
         // for elem in &boxes {
         //     window.draw_instance(&elem);
         // }

@@ -43,7 +43,8 @@ fn process_vertex(info: &[&str]) -> Result<Vector3<GLfloat>, String> {
 // Process a normal and return a Vector3 from its components.
 fn process_normal(info: &[&str]) -> Result<Vector3<GLfloat>, String> {
     let normal = try!(process_float(info, "normal", 3));
-    Ok(Vector3::new(normal[0], normal[1], normal[2]))
+    // Change axis for engine compatibility from Maya 2015's output.
+    Ok(Vector3::new(normal[2], normal[0], normal[1]))
 }
 
 // Process a texture coordinate and return a Vector2 from its components.
@@ -74,7 +75,7 @@ fn process_triplet(triplet: &str) -> Result<(u32, u32, u32), String> {
     let t1 = if split[0] == "" { None } else {
             Some(try!(u32::from_str(split[0]).map_err(|e| e.to_string()))) };
     let t2 = if split[1] == "" { None } else {
-            Some(try!(u32::from_str(split[2]).map_err(|e| e.to_string()))) };
+            Some(try!(u32::from_str(split[1]).map_err(|e| e.to_string()))) };
     let t3 = if split[2] == "" { None } else {
             Some(try!(u32::from_str(split[2]).map_err(|e| e.to_string()))) };
     let transformed = (t1, t2, t3);
@@ -132,7 +133,7 @@ pub fn decode_obj(fpath: &str) -> Result<DecodedOBJ, String> {
             "f" => {
                 elements.push(try!(process_face(
                         args, &vertices, &normals, &tcoords, &mut vlist, &mut vmap))); },
-            _ => { println!("Unknown line: {}", line) },
+            _ => (),
         }
     }
     Ok(DecodedOBJ { vertices: vlist, elements: elements })
