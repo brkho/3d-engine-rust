@@ -21,3 +21,35 @@ macro_rules! vec_to_addr { ($i:expr) => (mem::transmute($i.get_unchecked(0))) }
 #[macro_export]
 // Macro for converting between &str and a GL readable string.
 macro_rules! gl_str { ($s:expr) => (CString::new($s).unwrap().as_ptr()) }
+
+#[macro_export]
+// Macro for updating a mat4 uniform.
+macro_rules! uniform_mat4 { ($p:expr, $s:expr, $l: expr) =>
+        (gl::UniformMatrix4fv(
+            gl::GetUniformLocation($p, gl_str!($s)), 1,
+            gl::FALSE as GLboolean, ($l).as_ptr())) }
+
+#[macro_export]
+// Macro for updating a vec3 uniform.
+macro_rules! uniform_vec3 { ($p:expr, $s:expr, $l: expr) =>
+        (gl::Uniform3fv(
+            gl::GetUniformLocation($p, gl_str!($s)), 1, ($l).as_ptr())) }
+
+#[macro_export]
+// Macro for updating a float uniform.
+macro_rules! uniform_float { ($p:expr, $s:expr, $l: expr) =>
+        (gl::Uniform1f(gl::GetUniformLocation($p, gl_str!($s)), $l)) }
+
+#[macro_export]
+// Macro for updating a uint uniform.
+macro_rules! uniform_uint { ($p:expr, $s:expr, $l: expr) =>
+        (gl::Uniform1ui(gl::GetUniformLocation($p, gl_str!($s)), $l)) }
+
+#[macro_export]
+// Macro for getting a string representation of an index into the lights array
+// uniform.
+macro_rules! lights { [$i:expr, $f:expr] => (format!("lights[{}].{}", $i, $f)) }
+
+#[macro_export]
+// Macro for changing a Vector3D to vector of length 3.
+macro_rules! v3d_to_vec { ($v:expr) => (vec![$v[0], $v[1], $v[2]]) }
