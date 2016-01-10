@@ -35,7 +35,7 @@ pub type Quaternion = cgmath::Quaternion<GLfloat>;
 const BUFFER_SIZE: usize = 65535 * 4;
 
 // Maximum number of dynamic lights in a scene.
-const MAX_LIGHTS: usize = 16;
+const MAX_LIGHTS: usize = 8;
 
 // Contents of a VBO.
 // [P_x  P_y  P_z  N_x  N_y  N_z  T_u  T_v  C_r  C_g  C_b  C_a]
@@ -79,12 +79,17 @@ impl Color {
 }
 
 // Currently unimplemented because I do not have a way of loading in COLLADA/fbx files.
-pub struct Material { pub id: u8 }
+pub struct Material {
+    pub color: Color,
+    pub diffuse: GLuint,
+    pub specular: GLuint,
+    pub shininess: GLfloat,
+}
 
 impl Material {
     // Default constructor to be implemented later.
     pub fn new() -> Material {
-        Material { id: 0 }
+        Material { diffuse: 0, color: Color::new_u8(0, 0, 0, 0), specular: 0, shininess: 1.0 }
     }
 }
 
@@ -242,18 +247,14 @@ pub struct PerspectiveCamera {
     pub pos: Vector3D,
     pub target: Vector3D,
     proj: cgmath::Matrix4<GLfloat>,
+    view: cgmath::Matrix4<GLfloat>,
     up: Vector3D,
 }
 
 // Implementation of the Camera methods for PerspectiveCamera.
 impl Camera for PerspectiveCamera {
-    // Calculate the view matrix from the PerspectiveCamera's position and target.
-    fn get_view_matrix(&self) -> cgmath::Matrix4<GLfloat> {
-        cgmath::Matrix4::look_at(
-                cgmath::Point3::from_vec(self.pos),
-                cgmath::Point3::from_vec(self.target),
-                self.up)
-    }
+    // Return the precomputed view matrix.
+    fn get_view_matrix(&self) -> cgmath::Matrix4<GLfloat> { self.view }
 
     // Gets the forward vector from the view matrix.
     fn get_fwd(&self) -> Vector3D {
@@ -267,7 +268,7 @@ impl Camera for PerspectiveCamera {
         Vector3D::new(mat.x[0], mat.y[0], mat.z[0])
     }
 
-    // Since we precompute the projection, we can just return it here.
+    // Return the precomputed projection matrix.
     fn get_projection_matrix(&self) -> cgmath::Matrix4<GLfloat> { self.proj }
 }
 
@@ -282,6 +283,8 @@ impl PerspectiveCamera {
 
     // Constructor to initialize the fields and set up the Projection matrix with a specified up
     // vector.
+    // TODO: Right now, you must call update directly after. I should factor this new code into the
+    // GameWindow class like I do with lights.
     pub fn new_with_up(pos: Vector3D, target: Vector3D, up: Vector3D, aspect: f32,
             fov: f32, near: f32, far: f32) -> PerspectiveCamera {
         let proj = cgmath::PerspectiveFov {
@@ -289,7 +292,19 @@ impl PerspectiveCamera {
                 aspect: aspect,
                 near: near,
                 far: far };
-        PerspectiveCamera { pos: pos, target: target, up: up, proj: cgmath::Matrix4::from(proj) }
+        let dummy_view = cgmath::Matrix4::identity();
+        PerspectiveCamera { pos: pos, target: target,
+                up: up, proj: cgmath::Matrix4::from(proj), view: dummy_view }
+    }
+
+    // Updates the camera view matrix and the view uniform on the GPU. This must be called after
+    // any sequence of struct field changes for the changes to appear in-world.
+    pub fn update(&mut self, program: u32) {
+        self.view = cgmath::Matrix4::look_at(
+                cgmath::Point3::from_vec(self.pos),
+                cgmath::Point3::from_vec(self.target),
+                self.up);
+        unsafe { uniform_vec3!(program, "camera", v3d_to_vec!(self.pos)) };
     }
 }
 
@@ -306,16 +321,6 @@ pub struct PointLight {
     pub light_index: usize,
 }
 
-
-    // uint type;
-    // vec3 intensity;
-    // vec3 position;
-    // vec3 direction;
-    // float const_attn;
-    // float linear_attn;
-    // float quad_attn;
-    // float cutoff;
-    // float dropoff;
 impl PointLight {
     // Updates the light uniforms on the GPU. This must be called after any sequence of struct
     // field changes for the changes to appear in-world.
@@ -338,6 +343,19 @@ pub struct DirectionalLight {
     pub light_index: usize,
 }
 
+impl DirectionalLight {
+    // Updates the light uniforms on the GPU. This must be called after any sequence of struct
+    // field changes for the changes to appear in-world.
+    pub fn update(&self, program: u32) { unsafe {
+        let li = self.light_index;
+        uniform_uint!(program, lights![li, "type"], 2);
+        let color = vec![self.intensity.r, self.intensity.g, self.intensity.b];
+        println!("INTENSITY: {:?}, light_index: {}", color, self.light_index);
+        uniform_vec3!(program, lights![li, "intensity"], color);
+        uniform_vec3!(program, lights![li, "direction"], v3d_to_vec!(self.direction));
+    }}
+}
+
 // Light source that emanates from a fixed point like a PointLight, but has a certain arc and
 // falloff (like a flashlight).
 pub struct SpotLight {
@@ -350,6 +368,24 @@ pub struct SpotLight {
     pub cutoff: f32,
     pub dropoff: f32,
     pub light_index: usize,
+}
+
+impl SpotLight {
+    // Updates the light uniforms on the GPU. This must be called after any sequence of struct
+    // field changes for the changes to appear in-world.
+    pub fn update(&self, program: u32) { unsafe {
+        let li = self.light_index;
+        uniform_uint!(program, lights![li, "type"], 3);
+        let color = vec![self.intensity.r, self.intensity.g, self.intensity.b];
+        uniform_vec3!(program, lights![li, "intensity"], color);
+        uniform_vec3!(program, lights![li, "position"], v3d_to_vec!(self.position));
+        uniform_vec3!(program, lights![li, "direction"], v3d_to_vec!(self.direction));
+        uniform_float!(program, lights![li, "const_attn"], self.const_attn);
+        uniform_float!(program, lights![li, "linear_attn"], self.linear_attn);
+        uniform_float!(program, lights![li, "quad_attn"], self.quad_attn);
+        uniform_float!(program, lights![li, "cutoff"], self.cutoff);
+        uniform_float!(program, lights![li, "dropoff"], self.dropoff);
+    }}
 }
 
 // A window for graphics drawing that is managed by the graphics module. This is a thin wrapper
@@ -576,6 +612,7 @@ impl GameWindow {
     // Removes a PointLight from the scene given its handle.
     pub fn remove_point_light(&mut self, index: usize) {
         let free_index = (&self.point_lights[index]).as_ref().unwrap().light_index;
+        unsafe { uniform_uint!(self.program, lights![free_index, "type"], 0); };
         self.light_indices.push(free_index);
         self.point_lights[index] = None;
     }
@@ -585,48 +622,55 @@ impl GameWindow {
         (&mut self.point_lights[index]).as_mut().unwrap()
     }
 
-    // // Constructs and adds a DirectionalLight to the scene. This then returns an u16 handle
-    // // (internally representing the index in the array) that can be used with the getter to modify
-    // // light attrs.
-    // pub fn add_directional_light(&mut self, intensity: Color,
-    //         direction: Vector3D) -> Option<usize> {
-    //     let light = DirectionalLight { intensity: intensity, direction: direction };
-    //     let index = match self.light_indices.pop() { None => { return None; }, Some(i) => i, };
-    //     Some(GameWindow::add_light(light, &mut self.directional_lights, index))
-    // }
+    // Constructs and adds a DirectionalLight to the scene. This then returns an u16 handle
+    // (internally representing the index in the array) that can be used with the getter to modify
+    // light attrs.
+    pub fn add_directional_light(&mut self, intensity: Color,
+            direction: Vector3D) -> Option<usize> {
+        let index = match self.light_indices.pop() { None => { return None; }, Some(i) => i, };
+        let light = DirectionalLight { intensity: intensity, direction: direction,
+                light_index: index };
+        light.update(self.program);
+        Some(GameWindow::add_light(light, &mut self.directional_lights))
+    }
 
-    // // Removes a DirectionalLight from the scene given its handle.
-    // pub fn remove_directional_light(&mut self, index: usize) {
-    //     self.directional_lights[index] = None;
-    // }
+    // Removes a DirectionalLight from the scene given its handle.
+    pub fn remove_directional_light(&mut self, index: usize) {
+        let free_index = (&self.directional_lights[index]).as_ref().unwrap().light_index;
+        unsafe { uniform_uint!(self.program, lights![free_index, "type"], 0); };
+        self.directional_lights[index] = None;
+    }
 
-    // // Gets a reference to a DirectionalLight given its handle.
-    // pub fn get_directional_light(&mut self, index: usize) -> &mut DirectionalLight {
-    //     &mut self.directional_lights[index].as_mut().unwrap()
-    // }
+    // Gets a reference to a DirectionalLight given its handle.
+    pub fn get_directional_light(&mut self, index: usize) -> &mut DirectionalLight {
+        (&mut self.directional_lights[index]).as_mut().unwrap()
+    }
 
-    // // Constructs and adds a SpotLight to the scene. This then returns an u16 handle (internally
-    // // representing the index in the array) that can be used with the getter to modify light attrs.
-    // pub fn add_spot_light(&mut self, intensity: Color, position: Vector3D, direction: Vector3D,
-    //         const_attn: f32, linear_attn: f32, quad_attn: f32, cutoff: f32,
-    //         dropoff: f32) -> Option<usize> {
-    //     let light = SpotLight {
-    //             intensity: intensity, position: position, const_attn: const_attn,
-    //             direction: direction, linear_attn: linear_attn, quad_attn: quad_attn,
-    //             cutoff: cutoff, dropoff: dropoff };
-    //     let index = match self.light_indices.pop() { None => { return None; }, Some(i) => i, };
-    //     Some(GameWindow::add_light(light, &mut self.spot_lights, index))
-    // }
+    // Constructs and adds a SpotLight to the scene. This then returns an u16 handle (internally
+    // representing the index in the array) that can be used with the getter to modify light attrs.
+    pub fn add_spot_light(&mut self, intensity: Color, position: Vector3D, direction: Vector3D,
+            const_attn: f32, linear_attn: f32, quad_attn: f32, cutoff: f32,
+            dropoff: f32) -> Option<usize> {
+        let index = match self.light_indices.pop() { None => { return None; }, Some(i) => i, };
+        let light = SpotLight {
+                intensity: intensity, position: position, const_attn: const_attn,
+                direction: direction, linear_attn: linear_attn, quad_attn: quad_attn,
+                cutoff: cutoff, dropoff: dropoff, light_index: index };
+        light.update(self.program);
+        Some(GameWindow::add_light(light, &mut self.spot_lights))
+    }
 
-    // // Removes a SpotLight from the scene given its handle.
-    // pub fn remove_spot_light(&mut self, index: usize) {
-    //     self.spot_lights[index] = None;
-    // }
+    // Removes a SpotLight from the scene given its handle.
+    pub fn remove_spot_light(&mut self, index: usize) {
+        let free_index = (&self.spot_lights[index]).as_ref().unwrap().light_index;
+        unsafe { uniform_uint!(self.program, lights![free_index, "type"], 0); };
+        self.spot_lights[index] = None;
+    }
 
-    // // Gets a reference to a SpotLight given its handle.
-    // pub fn get_spot_light(&mut self, index: usize) -> &mut SpotLight {
-    //     &mut self.spot_lights[index].as_mut().unwrap()
-    // }
+    // Gets a reference to a SpotLight given its handle.
+    pub fn get_spot_light(&mut self, index: usize) -> &mut SpotLight {
+        (&mut self.spot_lights[index]).as_mut().unwrap()
+    }
 
     // Helper function that adds a light to a specified vector of lights. This keeps track of
     // "holes" in the array and returns a handle to the first unused location in the array. If
@@ -813,52 +857,68 @@ impl GameWindow {
 fn main() {
     let ground = obj::decode_obj("ground.obj").unwrap();
     let bunny = obj::decode_obj("bunny_smooth.obj").unwrap();
-    // let budda = obj::decode_obj("budda.obj").unwrap();
-    // let dragon = obj::decode_obj("dragon.obj").unwrap();
+    let budda = obj::decode_obj("budda.obj").unwrap();
+    let dragon = obj::decode_obj("dragon.obj").unwrap();
     let mut window = GameWindow::new(800, 600, "Engine Test".to_string()).unwrap();
-    window.bg_color = Color::new_rgb(0.5, 0.5, 0.5);
-    let camera1 = PerspectiveCamera::new(
+    let program = window.program;
+    window.bg_color = Color::new_rgb(0.2, 0.2, 0.2);
+
+    let mut camera1 = PerspectiveCamera::new(
             Vector3D::new(17.0, 17.0, 17.0), Vector3D::new(0.0, 0.0, 0.0), window.get_aspect_ratio(),
             45.0, 1.0, 100.0);
-    let camera2 = PerspectiveCamera::new(
+    camera1.update(program);
+    let mut camera2 = PerspectiveCamera::new(
             Vector3D::new(0.00001, 0.0, 30.0), Vector3D::new(0.0, 0.0, 0.0),
             window.get_aspect_ratio(), 45.0, 0.1, 100.0);
+    camera2.update(program);
     let main_camera = window.attach_camera(camera1);
     let secondary_camera = window.attach_camera(camera2);
     window.set_active_camera(main_camera).unwrap();
+
     let bunny_info = Rc::new(ModelInfo::from_obj(&bunny, Color::new_rgb(1.0, 0.0, 0.0)));
     let mut bunny_inst = ModelInstance::from(bunny_info.clone());
-    bunny_inst.scale = 30.0;
-    bunny_inst.pos = Vector3D::new(-4.0, 4.0, 1.0);
+    bunny_inst.scale = 35.0;
+    bunny_inst.pos = Vector3D::new(-4.0, 4.0, 0.0);
     bunny_inst.update();
-
 
     let ground_info = Rc::new(ModelInfo::from_obj(&ground, Color::new_rgb(1.0, 1.0, 1.0)));
     let mut ground_inst = ModelInstance::from(ground_info.clone());
     ground_inst.scale = 3.0;
-    ground_inst.pos = Vector3D::new(0.0, 0.0, -2.0);
+    ground_inst.pos = Vector3D::new(0.0, 0.0, -1.5);
     ground_inst.update();
 
-    // let dragon_info = Rc::new(ModelInfo::from_obj(&dragon, Color::new_rgb(0.0, 1.0, 0.0)));
-    // let mut dragon_inst = ModelInstance::from(dragon_info.clone());
-    // dragon_inst.scale = 0.6;
-    // dragon_inst.pos = Vector3D::new(4.0, -4.0, 0.0);
-    // dragon_inst.update();
+    let dragon_info = Rc::new(ModelInfo::from_obj(&dragon, Color::new_rgb(0.0, 1.0, 0.0)));
+    let mut dragon_inst = ModelInstance::from(dragon_info.clone());
+    dragon_inst.scale = 0.6;
+    dragon_inst.pos = Vector3D::new(4.0, -4.0, 0.0);
+    dragon_inst.update();
 
-    // let budda_info = Rc::new(ModelInfo::from_obj(&budda, Color::new_rgb(0.0, 0.0, 1.0)));
-    // let mut budda_inst = ModelInstance::from(budda_info.clone());
-    // budda_inst.pos = Vector3D::new(3.5, 3.5, 1.0);
-    // budda_inst.update();
+    let budda_info = Rc::new(ModelInfo::from_obj(&budda, Color::new_rgb(0.0, 0.0, 1.0)));
+    let mut budda_inst = ModelInstance::from(budda_info.clone());
+    budda_inst.pos = Vector3D::new(3.5, 3.5, 1.0);
+    budda_inst.update();
 
-    let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 0.0)));
-    let mut ob_inst = ModelInstance::from(ob.clone());
-    ob_inst.update();
+    let lb1 = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 0.0)));
+    let mut lb1_inst = ModelInstance::from(lb1.clone());
+    lb1_inst.update();
 
-     // pub fn add_point_light(&mut self, intensity: Color, position: Vector3D, const_attn: f32,
-            // linear_attn: f32, quad_attn: f32) -> Option<usize> {
-    let point_light = window.add_point_light(
-            Color::new_rgb(1.0, 0.0, 1.0), Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.2, 0.01).unwrap();
-    println!("created light: {}", point_light);
+    let mut lb2_inst = ModelInstance::from(lb1.clone());
+    lb2_inst.update();
+
+    let spot_light = window.add_spot_light(
+            Color::new_rgb(0.3, 0.3, 0.3), Vector3D::new(0.0, 15.0, 15.0),
+            Vector3D::new(0.0, -1.0, -1.0), 1.0, 0.0, 0.0, 0.4, 42.0).unwrap();
+
+    let dir_light = window.add_directional_light(
+            Color::new_rgb(0.4, 0.4, 0.4), Vector3D::new(-1.0, -1.0, -1.0)).unwrap();
+
+    let point_light1 = window.add_point_light(
+            Color::new_rgb(1.0, 1.0, 1.0), Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.06, 0.008).unwrap();
+    println!("created light: {}", point_light1);
+
+    let point_light2 = window.add_point_light(
+            Color::new_rgb(1.0, 1.0, 1.0), Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.06, 0.008).unwrap();
+    println!("created light: {}", point_light2);
 
 
     // let rb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
@@ -887,12 +947,15 @@ fn main() {
     let mut shift_pressed = 0;
     let mut last_time = time::now().to_timespec();
     let mut elapsed_time = 0.0;
+    let mut frame_count = 0;
     loop {
+        frame_count += 1;
         let curr_time = time::now().to_timespec();
         let elapsed_msec = (curr_time - last_time).num_microseconds().unwrap();
         let dt = elapsed_msec as f32 / 1000000.0;
         elapsed_time += dt;
         last_time = curr_time;
+        println!("AVERAGE FPS: {}", frame_count as f32 / elapsed_time);
 
         // Update Camera.
         {
@@ -911,19 +974,27 @@ fn main() {
             let dir = right * x_dir + fwd * -y_dir;
             camera.pos = camera.pos + dir;
             camera.target = camera.target + dir;
+            camera.update(program);
         }
 
         // Update Objects.
-        ob_inst.pos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 0.0);
-        ob_inst.update();
+        lb1_inst.pos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 4.0);
+        lb1_inst.update();
+        lb2_inst.pos = Vector3D::new(0.0, 10.0 * (1.43 * elapsed_time).sin(), 10.0 * (1.43 * elapsed_time).cos());
+        lb2_inst.update();
 
         {
-            let program = window.program;
-            let mut light = window.get_point_light(point_light);
-            let lpos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 0.0);
+            let mut light = window.get_point_light(point_light1);
+            let lpos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 4.0);
             light.position = lpos;
             light.update(program);
+        }
 
+        {
+            let mut light = window.get_point_light(point_light2);
+            let lpos = Vector3D::new(0.0, 10.0 * (1.43 * elapsed_time).sin(), 10.0 * (1.43 * elapsed_time).cos());
+            light.position = lpos;
+            light.update(program);
         }
 
         // unsafe {
@@ -941,10 +1012,11 @@ fn main() {
         // Draw Objects.
         window.clear();
         window.draw_instance(&bunny_inst);
-        window.draw_instance(&ob_inst);
+        window.draw_instance(&lb1_inst);
+        window.draw_instance(&lb2_inst);
         window.draw_instance(&ground_inst);
-        // window.draw_instance(&budda_inst);
-        // window.draw_instance(&dragon_inst);
+        window.draw_instance(&budda_inst);
+        window.draw_instance(&dragon_inst);
 
         // for elem in &boxes {
         //     window.draw_instance(&elem);
