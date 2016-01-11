@@ -36,6 +36,12 @@ macro_rules! uniform_vec3 { ($p:expr, $s:expr, $l: expr) =>
             gl::GetUniformLocation($p, gl_str!($s)), 1, ($l).as_ptr())) }
 
 #[macro_export]
+// Macro for updating a vec4 uniform.
+macro_rules! uniform_vec4 { ($p:expr, $s:expr, $l: expr) =>
+        (gl::Uniform4fv(
+            gl::GetUniformLocation($p, gl_str!($s)), 1, ($l).as_ptr())) }
+
+#[macro_export]
 // Macro for updating a float uniform.
 macro_rules! uniform_float { ($p:expr, $s:expr, $l: expr) =>
         (gl::Uniform1f(gl::GetUniformLocation($p, gl_str!($s)), $l)) }
@@ -46,6 +52,11 @@ macro_rules! uniform_uint { ($p:expr, $s:expr, $l: expr) =>
         (gl::Uniform1ui(gl::GetUniformLocation($p, gl_str!($s)), $l)) }
 
 #[macro_export]
+// Macro for updating a int uniform.
+macro_rules! uniform_int { ($p:expr, $s:expr, $l: expr) =>
+        (gl::Uniform1i(gl::GetUniformLocation($p, gl_str!($s)), $l)) }
+
+#[macro_export]
 // Macro for getting a string representation of an index into the lights array
 // uniform.
 macro_rules! lights { [$i:expr, $f:expr] => (format!("lights[{}].{}", $i, $f)) }
@@ -53,3 +64,7 @@ macro_rules! lights { [$i:expr, $f:expr] => (format!("lights[{}].{}", $i, $f)) }
 #[macro_export]
 // Macro for changing a Vector3D to vector of length 3.
 macro_rules! v3d_to_vec { ($v:expr) => (vec![$v[0], $v[1], $v[2]]) }
+
+#[macro_export]
+// Macro for changing a Vector3D to vector of length 3.
+macro_rules! color_to_vec { ($v:expr) => (vec![$v.r, $v.g, $v.b, $v.a]) }

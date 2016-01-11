@@ -13,7 +13,7 @@ extern crate time;
 use cgmath::{Point, Matrix, EuclideanVector, SquareMatrix};
 use gl::types::*;
 use glutin::{Window, Event, VirtualKeyCode, ElementState};
-use mmo::util::{shader, obj};
+use mmo::util::{bmp, obj, shader};
 use std::cell::Cell;
 use std::cmp;
 use std::ffi::CString;
@@ -38,13 +38,11 @@ const BUFFER_SIZE: usize = 65535 * 4;
 const MAX_LIGHTS: usize = 8;
 
 // Contents of a VBO.
-// [P_x  P_y  P_z  N_x  N_y  N_z  T_u  T_v  C_r  C_g  C_b  C_a]
+// [P_x  P_y  P_z  N_x  N_y  N_z  T_u  T_v]
 const VERTEX_POS_SIZE: usize = 3;
 const VERTEX_NORMAL_SIZE: usize = 3;
 const VERTEX_TCOORD_SIZE: usize = 2;
-const VERTEX_COLOR_SIZE: usize = 4;
-const VERTEX_SIZE: usize = VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE +
-        VERTEX_TCOORD_SIZE + VERTEX_COLOR_SIZE;
+const VERTEX_SIZE: usize = VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE + VERTEX_TCOORD_SIZE;
 
 // Represents a color in RGBA with intensity values from 0.0 to 1.0.
 pub struct Color {
@@ -78,7 +76,8 @@ impl Color {
     }
 }
 
-// Currently unimplemented because I do not have a way of loading in COLLADA/fbx files.
+// Describes a material for a model that contains a color, diffuse map, specular map, and a
+// shininess factor for specular. This can only be created after the window context is set up.
 pub struct Material {
     pub color: Color,
     pub diffuse: GLuint,
@@ -87,9 +86,37 @@ pub struct Material {
 }
 
 impl Material {
-    // Default constructor to be implemented later.
-    pub fn new() -> Material {
-        Material { diffuse: 0, color: Color::new_u8(0, 0, 0, 0), specular: 0, shininess: 1.0 }
+    // Default constructor that automatically assigns a white color given a shininess and paths to
+    // the diffuse and specular maps as BMPs.
+    pub fn new(diffuse_name: Option<String>, specular_name: Option<String>, shininess: GLfloat)
+            -> Material {
+        Material::new_with_color(diffuse_name, specular_name,
+                Color::new_rgb(1.0, 1.0, 1.0), shininess)
+    }
+
+    // Reads and binds a BMP texture given a name and returns the corresponding texture ID.
+    fn read_and_bind(texture_name: Option<String>) -> GLuint { unsafe {
+        if let Some(name) = texture_name {
+            let texture = bmp::decode_bmp(name).unwrap();
+            let image = texture.get_rgba_vec();
+            let mut texture_id = 0;
+            gl::GenTextures(1, &mut texture_id);
+            gl::BindTexture(gl::TEXTURE_2D, texture_id);
+            gl::TexImage2D(
+                    gl::TEXTURE_2D, 0, gl::RGBA as GLsizei, texture.width as GLsizei,
+                    texture.height as GLint, 0, gl::RGBA as GLuint, gl::UNSIGNED_BYTE,
+                    vec_to_addr!(image));
+            gl::GenerateMipmap(gl::TEXTURE_2D);
+            texture_id
+        } else { 0 }
+    }}
+
+    // Creates a Material with paths to diffuse and specular maps, shiniess, and color.
+    pub fn new_with_color(diffuse_name: Option<String>, specular_name: Option<String>,
+            color: Color, shininess: GLfloat) -> Material {
+        let diffuse = Material::read_and_bind(diffuse_name);
+        let specular = Material::read_and_bind(specular_name);
+        Material {color: color, diffuse: diffuse, specular: specular, shininess: shininess }
     }
 }
 
@@ -107,28 +134,20 @@ pub struct ModelInfo {
     pub normals: Vec<GLfloat>,
     pub elements: Vec<GLuint>,
     pub tcoords: Vec<GLfloat>,
-    pub color: Color,
     pub mat: Material,
     pub buffer_info: Cell<Option<BufferInfo>>,
 }
 
 impl ModelInfo {
-    // Default constructor with color initialized to <1.0, 1.0, 1.0, 1.0>.
+    // Default constructor with a material.
     pub fn new(vertices: Vec<GLfloat>, elems: Vec<GLuint>, normals: Vec<GLfloat>,
             tcoords: Vec<GLfloat>, mat: Material) -> ModelInfo {
-        ModelInfo::new_with_color(vertices, elems, normals, tcoords,
-                    Color::new_rgb(1.0, 1.0, 1.0), mat)
-    }
-
-    // Constructor to create a ModelInfo with a Color.
-    pub fn new_with_color(vertices: Vec<GLfloat>, elems: Vec<GLuint>, normals: Vec<GLfloat>,
-            tcoords: Vec<GLfloat>, color: Color, mat: Material) -> ModelInfo {
         ModelInfo { vertices: vertices, normals: normals, elements: elems, tcoords: tcoords,
-                color: color, mat: mat, buffer_info: Cell::new(None) }
+                mat: mat, buffer_info: Cell::new(None) }
     }
 
     // Creates a box with specified size and color.
-    pub fn new_box(scale_x: f32, scale_y: f32, scale_z: f32, color: Color) -> ModelInfo {
+    pub fn new_box(scale_x: f32, scale_y: f32, scale_z: f32, mat: Material) -> ModelInfo {
         let vertices: Vec<GLfloat> = vec![
                 -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
                  0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
@@ -146,11 +165,11 @@ impl ModelInfo {
         ];
         let normals: Vec<GLfloat> = vec![0.0; 9 * 3];
         let uvs: Vec<GLfloat> = vec![0.0; 9 * 2];
-        ModelInfo::new_with_color(vertices, elements, normals, uvs, color, Material::new())
+        ModelInfo::new(vertices, elements, normals, uvs, mat)
     }
 
     // Creates an ModelInfo from the result of a OBJ decoding.
-    pub fn from_obj(object: &obj::DecodedOBJ, color: Color) -> ModelInfo {
+    pub fn from_obj(object: &obj::DecodedOBJ, mat: Material) -> ModelInfo {
         let mut vertices: Vec<GLfloat> = Vec::new();
         let mut normals: Vec<GLfloat> = Vec::new();
         let mut tcoords: Vec<GLfloat> = Vec::new();
@@ -170,7 +189,7 @@ impl ModelInfo {
             elements.push(element.1);
             elements.push(element.2);
         }
-        ModelInfo::new_with_color(vertices, elements, normals, tcoords, color, Material::new())
+        ModelInfo::new(vertices, elements, normals, tcoords, mat)
     }
 
     // Gets a single vector representing the the ModelInfo in VBO format.
@@ -189,10 +208,6 @@ impl ModelInfo {
             vertices.push(self.normals[x + 2]);
             vertices.push(self.tcoords[y]);
             vertices.push(self.tcoords[y + 1]);
-            vertices.push(self.color.r);
-            vertices.push(self.color.g);
-            vertices.push(self.color.b);
-            vertices.push(self.color.a);
             y += 2;
         }
         vertices
@@ -403,6 +418,7 @@ pub struct GameWindow {
     gen: usize,
     working_vao: GLuint,
     bound_vao: Option<GLuint>,
+    default_texture: GLuint,
     vaos: Vec<Vec<Option<GLuint>>>,
     vbos: Vec<(GLuint, usize, usize)>, // (vbo_id, size, max_size)
     ebos: Vec<(GLuint, usize, usize)>, // (ebo_id, size, max_size)
@@ -430,9 +446,9 @@ impl GameWindow {
                 bg_color: bg_color, cameras: Vec::new(), gl_window: gl_window,
                 program: 0, point_lights: pl, directional_lights: dl, spot_lights: sl,
                 active_camera: None, gen: 0, bound_vao: None, vbos: Vec::new(), ebos: Vec::new(),
-                vaos: Vec::new(), working_vao: 0, light_indices: lights};
+                vaos: Vec::new(), working_vao: 0, light_indices: lights, default_texture: 0};
         // Begin unsafe OpenGL shenanigans. Here, we compile and link the shaders, set up the VAO
-        // and VBO, and specify the layout of the vertex data.
+        // and VBO, and set some texture parameters.
         unsafe {
             let vs = shader::compile_shader("std.vert", gl::VERTEX_SHADER);
             let fs = shader::compile_shader("std.frag", gl::FRAGMENT_SHADER);
@@ -443,6 +459,22 @@ impl GameWindow {
             gl::Enable(gl::DEPTH_TEST);
             gl::UseProgram(window.program);
             gl::BindFragDataLocation(window.program, 0, gl_str!("out_color"));
+
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as GLint);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as GLint);
+            gl::TexParameteri(
+                    gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR_MIPMAP_NEAREST as GLint);
+            gl::TexParameteri(
+                    gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR_MIPMAP_NEAREST as GLint);
+            // Set up the default white texture.
+            let white_tex: Vec<u8> = vec![255, 255, 255];
+            gl::GenTextures(1, &mut window.default_texture);
+            gl::BindTexture(gl::TEXTURE_2D, window.default_texture);
+            gl::TexImage2D(
+                gl::TEXTURE_2D, 0, gl::RGB as GLsizei, 1, 1, 0, gl::RGB as GLuint,
+                gl::UNSIGNED_BYTE, vec_to_addr!(white_tex));
+            gl::GenerateMipmap(gl::TEXTURE_2D);
+            gl::BindTexture(gl::TEXTURE_2D, 0);
         }
 
         window.set_size(width, height);
@@ -531,11 +563,6 @@ impl GameWindow {
                         float_size!(VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE, CVoid));
                 let color_attr = gl::GetAttribLocation(self.program, gl_str!("color"));
                 gl::EnableVertexAttribArray(color_attr as GLuint);
-                gl::VertexAttribPointer(
-                        color_attr as GLuint, VERTEX_COLOR_SIZE as i32, gl::FLOAT,
-                        gl::FALSE as GLboolean, float_size!(VERTEX_SIZE, GLsizei),
-                        float_size!(VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE + VERTEX_TCOORD_SIZE,
-                        CVoid));
                 vao
             },
         }
@@ -842,11 +869,22 @@ impl GameWindow {
         };
 
         unsafe {
+            let mat = &instance.info.mat;
             let info = instance.info.buffer_info.get().unwrap();
             self.bind_vao_checked(info.vao);
             uniform_mat4!(self.program, "transform", transform);
             uniform_mat4!(self.program, "model", instance.model);
             uniform_mat4!(self.program, "normal", instance.normal);
+            gl::ActiveTexture(gl::TEXTURE0);
+            let diffuse_id = if mat.diffuse == 0 { self.default_texture } else { mat.diffuse };
+            gl::BindTexture(gl::TEXTURE_2D, diffuse_id);
+            uniform_int!(self.program, "diffuse_map", 0);
+            gl::ActiveTexture(gl::TEXTURE1);
+            let spec_id = if mat.specular == 0 { self.default_texture } else { mat.specular };
+            gl::BindTexture(gl::TEXTURE_2D, spec_id);
+            uniform_int!(self.program, "specular_map", 1);
+            uniform_vec4!(self.program, "color", color_to_vec!(mat.color));
+
             gl::DrawElements(gl::TRIANGLES, info.size as i32,
                     gl::UNSIGNED_INT, uint_size!(info.start, CVoid));
         }
@@ -856,7 +894,7 @@ impl GameWindow {
 // Driver test program.
 fn main() {
     let ground = obj::decode_obj("ground.obj").unwrap();
-    let bunny = obj::decode_obj("bunny_smooth.obj").unwrap();
+    let bunny = obj::decode_obj("bunny_uv.obj").unwrap();
     let budda = obj::decode_obj("budda.obj").unwrap();
     let dragon = obj::decode_obj("dragon.obj").unwrap();
     let mut window = GameWindow::new(800, 600, "Engine Test".to_string()).unwrap();
@@ -875,42 +913,48 @@ fn main() {
     let secondary_camera = window.attach_camera(camera2);
     window.set_active_camera(main_camera).unwrap();
 
-    let bunny_info = Rc::new(ModelInfo::from_obj(&bunny, Color::new_rgb(1.0, 0.0, 0.0)));
+    let bunny_mat = Material::new_with_color(Some("brian.bmp".to_string()), None, Color::new_rgb(1.0, 1.0, 1.0), 75.0);
+    let bunny_info = Rc::new(ModelInfo::from_obj(&bunny, bunny_mat));
     let mut bunny_inst = ModelInstance::from(bunny_info.clone());
     bunny_inst.scale = 35.0;
     bunny_inst.pos = Vector3D::new(-4.0, 4.0, 0.0);
     bunny_inst.update();
 
-    let ground_info = Rc::new(ModelInfo::from_obj(&ground, Color::new_rgb(1.0, 1.0, 1.0)));
+    let ground_mat = Material::new_with_color(Some("brian.bmp".to_string()), None, Color::new_rgb(1.0, 1.0, 1.0), 75.0);
+    // let ground_mat = Material::new_with_color(None, None, Color::new_rgb(1.0, 1.0, 1.0), 75.0);
+    let ground_info = Rc::new(ModelInfo::from_obj(&ground, ground_mat));
     let mut ground_inst = ModelInstance::from(ground_info.clone());
     ground_inst.scale = 3.0;
     ground_inst.pos = Vector3D::new(0.0, 0.0, -1.5);
     ground_inst.update();
 
-    let dragon_info = Rc::new(ModelInfo::from_obj(&dragon, Color::new_rgb(0.0, 1.0, 0.0)));
+    let dragon_mat = Material::new_with_color(Some("uvs.bmp".to_string()), None, Color::new_rgb(1.0, 1.0, 1.0), 75.0);
+    let dragon_info = Rc::new(ModelInfo::from_obj(&dragon, dragon_mat));
     let mut dragon_inst = ModelInstance::from(dragon_info.clone());
     dragon_inst.scale = 0.6;
     dragon_inst.pos = Vector3D::new(4.0, -4.0, 0.0);
     dragon_inst.update();
 
-    let budda_info = Rc::new(ModelInfo::from_obj(&budda, Color::new_rgb(0.0, 0.0, 1.0)));
+    let budda_mat = Material::new_with_color(Some("brian.bmp".to_string()), None, Color::new_rgb(1.0, 1.0, 1.0), 75.0);
+    let budda_info = Rc::new(ModelInfo::from_obj(&budda, budda_mat));
     let mut budda_inst = ModelInstance::from(budda_info.clone());
     budda_inst.pos = Vector3D::new(3.5, 3.5, 1.0);
     budda_inst.update();
 
-    let lb1 = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 0.0)));
-    let mut lb1_inst = ModelInstance::from(lb1.clone());
+    let lb_mat = Material::new_with_color(None, None, Color::new_rgb(0.0, 0.0, 0.0), 75.0);
+    let lb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, lb_mat));
+    let mut lb1_inst = ModelInstance::from(lb.clone());
     lb1_inst.update();
 
-    let mut lb2_inst = ModelInstance::from(lb1.clone());
+    let mut lb2_inst = ModelInstance::from(lb.clone());
     lb2_inst.update();
 
-    let spot_light = window.add_spot_light(
-            Color::new_rgb(0.3, 0.3, 0.3), Vector3D::new(0.0, 15.0, 15.0),
-            Vector3D::new(0.0, -1.0, -1.0), 1.0, 0.0, 0.0, 0.4, 42.0).unwrap();
+    // let spot_light = window.add_spot_light(
+    //         Color::new_rgb(0.3, 0.3, 0.3), Vector3D::new(0.0, 15.0, 15.0),
+    //         Vector3D::new(0.0, -1.0, -1.0), 1.0, 0.0, 0.0, 0.4, 42.0).unwrap();
 
-    let dir_light = window.add_directional_light(
-            Color::new_rgb(0.4, 0.4, 0.4), Vector3D::new(-1.0, -1.0, -1.0)).unwrap();
+    // let dir_light = window.add_directional_light(
+    //         Color::new_rgb(0.4, 0.4, 0.4), Vector3D::new(-1.0, -1.0, -1.0)).unwrap();
 
     let point_light1 = window.add_point_light(
             Color::new_rgb(1.0, 1.0, 1.0), Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.06, 0.008).unwrap();
@@ -919,26 +963,6 @@ fn main() {
     let point_light2 = window.add_point_light(
             Color::new_rgb(1.0, 1.0, 1.0), Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.06, 0.008).unwrap();
     println!("created light: {}", point_light2);
-
-
-    // let rb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.0, 0.0)));
-    // let ob = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 0.5, 0.0)));
-    // let yb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(1.0, 1.0, 0.0)));
-    // let gb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 1.0, 0.0)));
-    // let bb = Rc::new(ModelInfo::new_box(1.0, 1.0, 1.0, Color::new_rgb(0.0, 0.0, 1.0)));
-    // let mut boxes = Vec::new();
-    // for i in 0..5 {
-    //     boxes.push(ModelInstance::from(rb.clone()));
-    //     boxes.last_mut().unwrap().pos = Vector3D::new(0.0, i as f32 * 1.5, 0.0);
-    //     boxes.push(ModelInstance::from(ob.clone()));
-    //     boxes.last_mut().unwrap().pos = Vector3D::new(1.5, i as f32 * 1.5, 0.0);
-    //     boxes.push(ModelInstance::from(yb.clone()));
-    //     boxes.last_mut().unwrap().pos = Vector3D::new(3.0, i as f32 * 1.5, 0.0);
-    //     boxes.push(ModelInstance::from(gb.clone()));
-    //     boxes.last_mut().unwrap().pos = Vector3D::new(4.5, i as f32 * 1.5, 0.0);
-    //     boxes.push(ModelInstance::from(bb.clone()));
-    //     boxes.last_mut().unwrap().pos = Vector3D::new(6.0, i as f32 * 1.5, 0.0);
-    // }
 
     let mut left_pressed = 0;
     let mut right_pressed = 0;
@@ -955,7 +979,9 @@ fn main() {
         let dt = elapsed_msec as f32 / 1000000.0;
         elapsed_time += dt;
         last_time = curr_time;
-        println!("AVERAGE FPS: {}", frame_count as f32 / elapsed_time);
+        if ((elapsed_time - dt) % 3.0) > (elapsed_time % 3.0) {
+            println!("AVERAGE FPS: {}", frame_count as f32 / elapsed_time);
+        }
 
         // Update Camera.
         {
@@ -997,18 +1023,6 @@ fn main() {
             light.update(program);
         }
 
-        // unsafe {
-        //     gl::Uniform3fv(
-        //             gl::GetUniformLocation(window.program, gl_str!("light.position")), 1,
-        //             lpos.as_ptr());
-        // }
-        // let mut count = 0.0;
-        // for elem in &mut boxes {
-        //     elem.scale = 0.5 + (((
-        //             elapsed_time * 10.0 + (((count % 5.0) / 4.0) * 3.1415)).sin() + 1.0) / 3.0);
-        //     count += 1.0;
-        // }
-
         // Draw Objects.
         window.clear();
         window.draw_instance(&bunny_inst);
@@ -1017,11 +1031,7 @@ fn main() {
         window.draw_instance(&ground_inst);
         window.draw_instance(&budda_inst);
         window.draw_instance(&dragon_inst);
-
-        // for elem in &boxes {
-        //     window.draw_instance(&elem);
-        // }
-        window.swap_buffers();
+        // window.swap_buffers();
 
         for event in window.poll_events() {
             match event {
