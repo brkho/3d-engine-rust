@@ -50,7 +50,7 @@ fn process_normal(info: &[&str]) -> Result<Vector3<GLfloat>, String> {
 // Process a texture coordinate and return a Vector2 from its components.
 fn process_tcoord(info: &[&str]) -> Result<Vector2<GLfloat>, String> {
     let tcoord = try!(process_float(info, "texture coordinate", 2));
-    Ok(Vector2::new(tcoord[0], tcoord[1]))
+    Ok(Vector2::new(tcoord[0], 1.0 - tcoord[1]))
 }
 
 // Helper function to refactor float processing with error checking.

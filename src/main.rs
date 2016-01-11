@@ -883,6 +883,7 @@ impl GameWindow {
             let spec_id = if mat.specular == 0 { self.default_texture } else { mat.specular };
             gl::BindTexture(gl::TEXTURE_2D, spec_id);
             uniform_int!(self.program, "specular_map", 1);
+            uniform_float!(self.program, "specular_coeff", mat.shininess);
             uniform_vec4!(self.program, "color", color_to_vec!(mat.color));
 
             gl::DrawElements(gl::TRIANGLES, info.size as i32,
@@ -913,14 +914,14 @@ fn main() {
     let secondary_camera = window.attach_camera(camera2);
     window.set_active_camera(main_camera).unwrap();
 
-    let bunny_mat = Material::new_with_color(Some("brian.bmp".to_string()), None, Color::new_rgb(1.0, 1.0, 1.0), 75.0);
+    let bunny_mat = Material::new_with_color(Some("uvs.bmp".to_string()), None, Color::new_rgb(1.0, 1.0, 1.0), 10000.0);
     let bunny_info = Rc::new(ModelInfo::from_obj(&bunny, bunny_mat));
     let mut bunny_inst = ModelInstance::from(bunny_info.clone());
     bunny_inst.scale = 35.0;
     bunny_inst.pos = Vector3D::new(-4.0, 4.0, 0.0);
     bunny_inst.update();
 
-    let ground_mat = Material::new_with_color(Some("brian.bmp".to_string()), None, Color::new_rgb(1.0, 1.0, 1.0), 75.0);
+    let ground_mat = Material::new_with_color(Some("brian.bmp".to_string()), Some("spec.bmp".to_string()), Color::new_rgb(1.0, 1.0, 1.0), 40.0);
     // let ground_mat = Material::new_with_color(None, None, Color::new_rgb(1.0, 1.0, 1.0), 75.0);
     let ground_info = Rc::new(ModelInfo::from_obj(&ground, ground_mat));
     let mut ground_inst = ModelInstance::from(ground_info.clone());
@@ -954,7 +955,7 @@ fn main() {
     //         Vector3D::new(0.0, -1.0, -1.0), 1.0, 0.0, 0.0, 0.4, 42.0).unwrap();
 
     // let dir_light = window.add_directional_light(
-    //         Color::new_rgb(0.4, 0.4, 0.4), Vector3D::new(-1.0, -1.0, -1.0)).unwrap();
+    //         Color::new_rgb(0.9, 0.9, 0.9), Vector3D::new(-1.0, -1.0, -1.0)).unwrap();
 
     let point_light1 = window.add_point_light(
             Color::new_rgb(1.0, 1.0, 1.0), Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.06, 0.008).unwrap();
@@ -1031,7 +1032,7 @@ fn main() {
         window.draw_instance(&ground_inst);
         window.draw_instance(&budda_inst);
         window.draw_instance(&dragon_inst);
-        // window.swap_buffers();
+        window.swap_buffers();
 
         for event in window.poll_events() {
             match event {

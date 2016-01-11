@@ -8,8 +8,7 @@
 
 // TODO: Add materials so these can be a uniforms.
 #define AMBIENT_COEFF 0.2
-#define SPECULAR_COEFF 75.0
-#define SPECULAR_color 1.0
+#define SPECULAR_COLOR 1.0
 
 in vec3 Normal;
 in vec3 Vert;
@@ -33,7 +32,9 @@ uniform vec3 camera;
 uniform vec4 color;
 uniform mat4 model;
 uniform mat4 normal;
+uniform float specular_coeff;
 uniform sampler2D diffuse_map;
+uniform sampler2D specular_map;
 
 void main() {
     // Ambient light.
@@ -67,15 +68,16 @@ void main() {
 
         // Get diffuse lighting.
         float cos_nl = max(dot(surface_to_light, norm), 0.0);
-        vec4 diffuse = vec4(cos_nl * intensity * color.rgb * texture(diffuse_map, TCoord).rgb, color.a);
+        vec4 diffuse = vec4(cos_nl * intensity * color.rgb *
+                texture(diffuse_map, TCoord).rgb, color.a);
 
         // Get specular lighting.
         vec4 specular = vec4(0, 0, 0, 0);
         if (cos_nl > 0.0) {
             vec3 surface_to_camera = normalize(camera - position);
             vec3 halfway = normalize(surface_to_light + surface_to_camera);
-            float cos_nha = pow(max(dot(norm, halfway), 0.0), SPECULAR_COEFF);
-            specular = vec4(cos_nha * SPECULAR_color * intensity, 0.0);
+            float cos_nha = pow(max(dot(norm, halfway), 0.0), specular_coeff);
+            specular = vec4(cos_nha * texture(specular_map, TCoord).rgb * intensity, 0.0);
         }
 
         // Get ambient lighting.
