@@ -11,7 +11,6 @@ extern crate gl;
 
 use gfx::color;
 use gfx::types::*;
-use std::ffi::CString;
 
 // Light source that emanates from a fixed point with specified intensity and attenuation.
 pub struct PointLight {
@@ -20,41 +19,30 @@ pub struct PointLight {
     pub const_attn: f32,
     pub linear_attn: f32,
     pub quad_attn: f32,
-    pub light_index: usize,
+    pub light_index: Option<usize>,
 }
 
 impl PointLight {
-    // Updates the light uniforms on the GPU. This must be called after any sequence of struct
-    // field changes for the changes to appear in-world.
-    pub fn update(&self, program: u32) { unsafe {
-        let li = self.light_index;
-        uniform_uint!(program, lights![li, "type"], 1);
-        let color = vec![self.intensity.r, self.intensity.g, self.intensity.b];
-        uniform_vec3!(program, lights![li, "intensity"], color);
-        uniform_vec3!(program, lights![li, "position"], v3d_to_vec!(self.position));
-        uniform_float!(program, lights![li, "const_attn"], self.const_attn);
-        uniform_float!(program, lights![li, "linear_attn"], self.linear_attn);
-        uniform_float!(program, lights![li, "quad_attn"], self.quad_attn);
-    }}
+    // Default constructor for a PointLight.
+    pub fn new(intensity: color::Color, position: Vector3D, const_attn: f32, linear_attn: f32,
+            quad_attn: f32) -> PointLight {
+        PointLight { intensity: intensity, position: position, const_attn: const_attn,
+                linear_attn: linear_attn, quad_attn: quad_attn, light_index: None }
+    }
 }
 
 // Light source that shines from an infinite distance from a direction (such as the sun).
 pub struct DirectionalLight {
     pub intensity: color::Color,
     pub direction: Vector3D,
-    pub light_index: usize,
+    pub light_index: Option<usize>,
 }
 
 impl DirectionalLight {
-    // Updates the light uniforms on the GPU. This must be called after any sequence of struct
-    // field changes for the changes to appear in-world.
-    pub fn update(&self, program: u32) { unsafe {
-        let li = self.light_index;
-        uniform_uint!(program, lights![li, "type"], 2);
-        let color = vec![self.intensity.r, self.intensity.g, self.intensity.b];
-        uniform_vec3!(program, lights![li, "intensity"], color);
-        uniform_vec3!(program, lights![li, "direction"], v3d_to_vec!(self.direction));
-    }}
+    // Default constructor for a DirectionalLight.
+    pub fn new(intensity: color::Color, direction: Vector3D) -> DirectionalLight {
+        DirectionalLight { intensity: intensity, direction: direction, light_index: None }
+    }
 }
 
 // Light source that emanates from a fixed point like a PointLight, but has a certain arc and
@@ -68,23 +56,16 @@ pub struct SpotLight {
     pub quad_attn: f32,
     pub cutoff: f32,
     pub dropoff: f32,
-    pub light_index: usize,
+    pub light_index: Option<usize>,
 }
 
 impl SpotLight {
-    // Updates the light uniforms on the GPU. This must be called after any sequence of struct
-    // field changes for the changes to appear in-world.
-    pub fn update(&self, program: u32) { unsafe {
-        let li = self.light_index;
-        uniform_uint!(program, lights![li, "type"], 3);
-        let color = vec![self.intensity.r, self.intensity.g, self.intensity.b];
-        uniform_vec3!(program, lights![li, "intensity"], color);
-        uniform_vec3!(program, lights![li, "position"], v3d_to_vec!(self.position));
-        uniform_vec3!(program, lights![li, "direction"], v3d_to_vec!(self.direction));
-        uniform_float!(program, lights![li, "const_attn"], self.const_attn);
-        uniform_float!(program, lights![li, "linear_attn"], self.linear_attn);
-        uniform_float!(program, lights![li, "quad_attn"], self.quad_attn);
-        uniform_float!(program, lights![li, "cutoff"], self.cutoff);
-        uniform_float!(program, lights![li, "dropoff"], self.dropoff);
-    }}
+    // Default constructor for a SpotLight.
+    pub fn new(intensity: color::Color, position: Vector3D, direction: Vector3D, const_attn: f32,
+            linear_attn: f32, quad_attn: f32, cutoff: f32, dropoff: f32) -> SpotLight {
+        SpotLight { intensity: intensity, position: position, const_attn: const_attn,
+                direction: direction, linear_attn: linear_attn, quad_attn: quad_attn,
+                cutoff: cutoff, dropoff: dropoff, light_index: None }
+
+    }
 }

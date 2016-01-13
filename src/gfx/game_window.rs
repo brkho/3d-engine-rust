@@ -257,79 +257,137 @@ impl GameWindow {
         Ok(())
     }
 
-    // Constructs and adds a PointLight to the scene. This then returns an u16 handle (internally
-    // representing the index in the array) that can be used with the getter to modify light attrs.
-    pub fn add_point_light(&mut self, intensity: color::Color, position: Vector3D, const_attn: f32,
-            linear_attn: f32, quad_attn: f32) -> Option<usize> {
-        let index = match self.light_indices.pop() { None => { return None; }, Some(i) => i, };
-        let light = light::PointLight {
-                intensity: intensity, position: position, const_attn: const_attn,
-                linear_attn: linear_attn, quad_attn: quad_attn, light_index: index };
-        light.update(self.program);
-        Some(GameWindow::add_light(light, &mut self.point_lights))
+    // Attaches and transfers ownership of a point light to the window. This then returns a handle
+    // (internally representing the index in the array) that can be used with the getter to modify
+    // light attrs.
+    pub fn attach_point_light(&mut self, mut light: light::PointLight) -> usize {
+        light.light_index = self.light_indices.pop();
+        let vec_index = GameWindow::add_light(light, &mut self.point_lights);
+        self.update_point_light(vec_index);
+        vec_index
     }
 
-    // Removes a PointLight from the scene given its handle.
-    pub fn remove_point_light(&mut self, index: usize) {
-        let free_index = (&self.point_lights[index]).as_ref().unwrap().light_index;
+    // Updates the uniforms for a point light. This must be called after any sequence of struct
+    // field changes for the changes to appear in-world.
+    pub fn update_point_light(&self, index: usize) { unsafe {
+        let light = self.get_point_light(index);
+        let li = light.light_index.unwrap();
+        uniform_uint!(self.program, lights![li, "type"], 1);
+        let color = vec![light.intensity.r, light.intensity.g, light.intensity.b];
+        uniform_vec3!(self.program, lights![li, "intensity"], color);
+        uniform_vec3!(self.program, lights![li, "position"], v3d_to_vec!(light.position));
+        uniform_float!(self.program, lights![li, "const_attn"], light.const_attn);
+        uniform_float!(self.program, lights![li, "linear_attn"], light.linear_attn);
+        uniform_float!(self.program, lights![li, "quad_attn"], light.quad_attn);
+    }}
+
+    // Removes a PointLight from the scene given its handle and returns it to transfer ownership.
+    pub fn remove_point_light(&mut self, index: usize) -> light::PointLight {
+        self.point_lights.push(None);
+        let light = self.point_lights.swap_remove(index).unwrap();
+        let free_index = light.light_index.unwrap();
         unsafe { uniform_uint!(self.program, lights![free_index, "type"], 0); };
         self.light_indices.push(free_index);
-        self.point_lights[index] = None;
+        light
     }
 
-    // Gets a reference to a PointLight given its handle.
-    pub fn get_point_light(&mut self, index: usize) -> &mut light::PointLight {
+    // Gets a mutable reference to a PointLight given its handle.
+    pub fn get_point_light_mut(&mut self, index: usize) -> &mut light::PointLight {
         (&mut self.point_lights[index]).as_mut().unwrap()
     }
 
-    // Constructs and adds a DirectionalLight to the scene. This then returns an u16 handle
-    // (internally representing the index in the array) that can be used with the getter to modify
-    // light attrs.
-    pub fn add_directional_light(&mut self, intensity: color::Color,
-            direction: Vector3D) -> Option<usize> {
-        let index = match self.light_indices.pop() { None => { return None; }, Some(i) => i, };
-        let light = light::DirectionalLight { intensity: intensity, direction: direction,
-                light_index: index };
-        light.update(self.program);
-        Some(GameWindow::add_light(light, &mut self.directional_lights))
+    // Gets an immutable reference to a PointLight given its handle.
+    pub fn get_point_light(&self, index: usize) -> &light::PointLight {
+        (&self.point_lights[index]).as_ref().unwrap()
     }
 
-    // Removes a DirectionalLight from the scene given its handle.
-    pub fn remove_directional_light(&mut self, index: usize) {
-        let free_index = (&self.directional_lights[index]).as_ref().unwrap().light_index;
+    // Attaches and transfers ownership of a directional light to the window. This then returns a
+    // handle (internally representing the index in the array) that can be used with the getter to
+    // modify light attrs.
+    pub fn attach_directional_light(&mut self, mut light: light::DirectionalLight) -> usize {
+        light.light_index = self.light_indices.pop();
+        let vec_index = GameWindow::add_light(light, &mut self.directional_lights);
+        self.update_directional_light(vec_index);
+        vec_index
+    }
+
+    // Updates the uniforms for a directional light. This must be called after any sequence of
+    // struct field changes for the changes to appear in-world.
+    pub fn update_directional_light(&self, index: usize) { unsafe {
+        let light = self.get_directional_light(index);
+        let li = light.light_index.unwrap();
+        uniform_uint!(self.program, lights![li, "type"], 2);
+        let color = vec![light.intensity.r, light.intensity.g, light.intensity.b];
+        uniform_vec3!(self.program, lights![li, "intensity"], color);
+        uniform_vec3!(self.program, lights![li, "direction"], v3d_to_vec!(light.direction));
+    }}
+
+    // Removes a DirectionalLight from the scene given its handle and returns it to transfer
+    // ownership.
+    pub fn remove_directional_light(&mut self, index: usize) -> light::DirectionalLight {
+        self.directional_lights.push(None);
+        let light = self.directional_lights.swap_remove(index).unwrap();
+        let free_index = light.light_index.unwrap();
         unsafe { uniform_uint!(self.program, lights![free_index, "type"], 0); };
-        self.directional_lights[index] = None;
+        self.light_indices.push(free_index);
+        light
     }
 
     // Gets a reference to a DirectionalLight given its handle.
-    pub fn get_directional_light(&mut self, index: usize) -> &mut light::DirectionalLight {
+    pub fn get_directional_light_mut(&mut self, index: usize) -> &mut light::DirectionalLight {
         (&mut self.directional_lights[index]).as_mut().unwrap()
     }
 
-    // Constructs and adds a SpotLight to the scene. This then returns an u16 handle (internally
-    // representing the index in the array) that can be used with the getter to modify light attrs.
-    pub fn add_spot_light(&mut self, intensity: color::Color, position: Vector3D,
-            direction: Vector3D, const_attn: f32, linear_attn: f32, quad_attn: f32, cutoff: f32,
-            dropoff: f32) -> Option<usize> {
-        let index = match self.light_indices.pop() { None => { return None; }, Some(i) => i, };
-        let light = light::SpotLight {
-                intensity: intensity, position: position, const_attn: const_attn,
-                direction: direction, linear_attn: linear_attn, quad_attn: quad_attn,
-                cutoff: cutoff, dropoff: dropoff, light_index: index };
-        light.update(self.program);
-        Some(GameWindow::add_light(light, &mut self.spot_lights))
+    // Gets an immutable reference to a DirectionalLight given its handle.
+    pub fn get_directional_light(&self, index: usize) -> &light::DirectionalLight {
+        (&self.directional_lights[index]).as_ref().unwrap()
     }
 
-    // Removes a SpotLight from the scene given its handle.
-    pub fn remove_spot_light(&mut self, index: usize) {
-        let free_index = (&self.spot_lights[index]).as_ref().unwrap().light_index;
+    // Attaches and transfers ownership of a spot light to the window. This then returns a handle
+    // (internally representing the index in the array) that can be used with the getter to modify
+    // light attrs.
+    pub fn attach_spot_light(&mut self, mut light: light::SpotLight) -> usize {
+        light.light_index = self.light_indices.pop();
+        let vec_index = GameWindow::add_light(light, &mut self.spot_lights);
+        self.update_spot_light(vec_index);
+        vec_index
+    }
+
+    // Updates the uniforms for a spot light. This must be called after any sequence of struct
+    // field changes for the changes to appear in-world.
+    pub fn update_spot_light(&self, index: usize) { unsafe {
+        let light = self.get_spot_light(index);
+        let li = light.light_index.unwrap();
+        uniform_uint!(self.program, lights![li, "type"], 3);
+        let color = vec![light.intensity.r, light.intensity.g, light.intensity.b];
+        uniform_vec3!(self.program, lights![li, "intensity"], color);
+        uniform_vec3!(self.program, lights![li, "position"], v3d_to_vec!(light.position));
+        uniform_vec3!(self.program, lights![li, "direction"], v3d_to_vec!(light.direction));
+        uniform_float!(self.program, lights![li, "const_attn"], light.const_attn);
+        uniform_float!(self.program, lights![li, "linear_attn"], light.linear_attn);
+        uniform_float!(self.program, lights![li, "quad_attn"], light.quad_attn);
+        uniform_float!(self.program, lights![li, "cutoff"], light.cutoff);
+        uniform_float!(self.program, lights![li, "dropoff"], light.dropoff);
+    }}
+
+    // Removes a SpotLight from the scene given its handle and returns it to transfer ownership.
+    pub fn remove_spot_light(&mut self, index: usize) -> light::SpotLight {
+        self.spot_lights.push(None);
+        let light = self.spot_lights.swap_remove(index).unwrap();
+        let free_index = light.light_index.unwrap();
         unsafe { uniform_uint!(self.program, lights![free_index, "type"], 0); };
-        self.spot_lights[index] = None;
+        self.light_indices.push(free_index);
+        light
     }
 
-    // Gets a reference to a SpotLight given its handle.
-    pub fn get_spot_light(&mut self, index: usize) -> &mut light::SpotLight {
+    // Gets a mutable reference to a SpotLight given its handle.
+    pub fn get_spot_light_mut(&mut self, index: usize) -> &mut light::SpotLight {
         (&mut self.spot_lights[index]).as_mut().unwrap()
+    }
+
+    // Gets an immutable reference to a SpotLight given its handle.
+    pub fn get_spot_light(&self, index: usize) -> &light::SpotLight {
+        (&self.spot_lights[index]).as_ref().unwrap()
     }
 
     // Helper function that adds a light to a specified vector of lights. This keeps track of

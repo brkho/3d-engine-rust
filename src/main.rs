@@ -4,15 +4,13 @@
 // brian@brkho.com
 
 extern crate mmo;
-extern crate cgmath;
-extern crate glutin;
-extern crate gl;
 extern crate time;
 
 use mmo::gfx::color;
 use mmo::gfx::camera;
 use mmo::gfx::camera::Camera;
 use mmo::gfx::game_window::*;
+use mmo::gfx::light;
 use mmo::gfx::material;
 use mmo::gfx::model;
 use mmo::gfx::types::*;
@@ -90,20 +88,22 @@ fn main() {
     let mut lb2_inst = model::ModelInstance::from(lb.clone());
     lb2_inst.update();
 
-    let spot_light = window.add_spot_light(
-            color::Color::new_rgb(0.3, 0.3, 0.3), Vector3D::new(0.0, 15.0, 15.0),
-            Vector3D::new(0.0, -1.0, -1.0), 1.0, 0.0, 0.0, 0.4, 42.0).unwrap();
+    let spot_obj = light::SpotLight::new(color::Color::new_rgb(0.3, 0.3, 0.3),
+            Vector3D::new(0.0, 15.0, 15.0), Vector3D::new(0.0, -1.0, -1.0), 1.0, 0.0, 0.0, 0.4,
+            42.0);
+    let spot_handle = window.attach_spot_light(spot_obj);
 
-    let dir_light = window.add_directional_light(
-            color::Color::new_rgb(0.5, 0.5, 0.5), Vector3D::new(-1.0, -1.0, -1.0)).unwrap();
+    let dir_obj = light::DirectionalLight::new(color::Color::new_rgb(1.0, 1.0, 1.0),
+            Vector3D::new(-1.0, -1.0, -1.0));
+    let dir_handle = window.attach_directional_light(dir_obj);
 
-    let point_light1 = window.add_point_light(
-            color::Color::new_rgb(1.0, 1.0, 1.0),
-            Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.03, 0.004).unwrap();
+    let pl1_obj = light::PointLight::new(color::Color::new_rgb(1.0, 1.0, 1.0),
+            Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.03, 0.004);
+    let pl1_handle = window.attach_point_light(pl1_obj);
 
-    let point_light2 = window.add_point_light(
-            color::Color::new_rgb(1.0, 1.0, 1.0),
-            Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.06, 0.008).unwrap();
+    // let point_light2 = window.attach_point_light(
+    //         color::Color::new_rgb(1.0, 1.0, 1.0),
+    //         Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.06, 0.008).unwrap();
 
     let mut left_pressed = 0;
     let mut right_pressed = 0;
@@ -151,20 +151,27 @@ fn main() {
                 10.0 * (1.43 * elapsed_time).cos());
         lb2_inst.update();
 
-        {
-            let mut light = window.get_point_light(point_light1);
-            let lpos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 4.0);
-            light.position = lpos;
-            light.update(program);
-        }
+        // {   let mut light = window.get_spot_light_mut(spot_handle);
+        //     let intensity = ((elapsed_time * 10.0).sin() + 1.0) / 2.0;
+        //     light.intensity = color::Color::new_rgb(intensity, intensity, intensity); }
+        // window.update_spot_light(spot_handle);
 
-        {
-            let mut light = window.get_point_light(point_light2);
-            let lpos = Vector3D::new(0.0, 10.0 * (1.43 * elapsed_time).sin(),
-                    10.0 * (1.43 * elapsed_time).cos());
-            light.position = lpos;
-            light.update(program);
-        }
+        {   let mut light = window.get_directional_light_mut(dir_handle);
+            let intensity = ((elapsed_time * 10.0).sin() + 1.0) / 2.0;
+            light.intensity = color::Color::new_rgb(intensity, intensity, intensity); }
+        window.update_directional_light(dir_handle);
+
+        {   let mut light = window.get_point_light_mut(pl1_handle);
+            let lpos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 4.0);
+            light.position = lpos; }
+        window.update_point_light(pl1_handle);
+
+        // {   let mut light = window.get_point_light(point_light2);
+        //     let lpos = Vector3D::new(0.0, 10.0 * (1.43 * elapsed_time).sin(),
+        //             10.0 * (1.43 * elapsed_time).cos());
+        //     light.position = lpos;
+        //     light.update(program); }
+        // window.update_point_light(pl2_handle);
 
         // Draw Objects.
         window.clear();
