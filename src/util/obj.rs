@@ -86,7 +86,8 @@ fn process_triplet(triplet: &str) -> Result<(u32, u32, u32), String> {
     }
 }
 
-// Process a triangle face and return a Vector3 from its components.
+// Process a triangle face and return a Vector3 from its components. This also calculates the
+// tangent and bitangent based on a face and angle weighted average.
 fn process_face(info: &[&str], vertices: &Vec<Vector3<GLfloat>>, normals: &Vec<Vector3<GLfloat>>,
         tcoords: &Vec<Vector2<GLfloat>>, vlist: &mut Vec<Vertex>,
         vmap: &mut HashMap<(u32, u32, u32), u32>) -> Result<(u32, u32, u32), String> {

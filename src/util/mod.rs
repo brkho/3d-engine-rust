@@ -1,4 +1,5 @@
 pub mod bmp;
-pub mod macros;
+#[macro_use]
+// pub mod macros;
 pub mod obj;
 pub mod shader;
