@@ -10,8 +10,8 @@ extern crate cgmath;
 extern crate gl;
 extern crate glutin;
 
-use self::cgmath::Matrix;
-pub use self::glutin::{Window, Event, VirtualKeyCode, ElementState};
+use self::cgmath::{Matrix, Point};
+pub use self::glutin::{ElementState, Event, VirtualKeyCode};
 
 use gfx::camera;
 use gfx::camera::Camera;
@@ -20,6 +20,7 @@ use gfx::light;
 use gfx::model;
 use gfx::types::*;
 use util::shader;
+use self::glutin::{Window, WindowBuilder};
 use std::cmp;
 use std::ffi::CString;
 use std::mem;
@@ -31,6 +32,9 @@ const BUFFER_SIZE: usize = 65535 * 4;
 
 // Maximum number of dynamic lights in a scene.
 const MAX_LIGHTS: usize = 8;
+
+// The default gamma of the scene.
+const DEFAULT_GAMMA: GLfloat = 2.2;
 
 // Contents of a VBO.
 // [P_x  P_y  P_z  N_x  N_y  N_z  T_u  T_v]
@@ -55,6 +59,7 @@ pub struct GameWindow {
     working_vao: GLuint,
     bound_vao: Option<GLuint>,
     default_texture: GLuint,
+    gamma: GLfloat,
     vaos: Vec<Vec<Option<GLuint>>>,
     vbos: Vec<(GLuint, usize, usize)>, // (vbo_id, size, max_size)
     ebos: Vec<(GLuint, usize, usize)>, // (ebo_id, size, max_size)
@@ -71,7 +76,8 @@ impl GameWindow {
 
         // TODO: Handle the actual error reporting of glutin and make this code less ugly.
         let creation_err = "Unable to create GameWindow.";
-        let gl_window = try!(Window::new().map_err(|_| creation_err.to_string()));
+        let gl_window_builder = WindowBuilder::new().with_vsync().with_srgb(Some(true));
+        let gl_window = try!(gl_window_builder.build().map_err(|_| creation_err.to_string()));
         unsafe { try!(gl_window.make_current().map_err(|_| creation_err.to_string())) }
         gl_window.set_title(&title);
         gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
@@ -81,7 +87,12 @@ impl GameWindow {
                 bg_color: bg_color, cameras: Vec::new(), gl_window: gl_window,
                 program: 0, point_lights: pl, directional_lights: dl, spot_lights: sl,
                 active_camera: None, gen: 0, bound_vao: None, vbos: Vec::new(), ebos: Vec::new(),
-                vaos: Vec::new(), working_vao: 0, light_indices: lights, default_texture: 0};
+                vaos: Vec::new(), working_vao: 0, light_indices: lights, default_texture: 0,
+                gamma: 0.0 };
+        window.set_gamma(DEFAULT_GAMMA);
+
+        unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB); };
+
         // Begin unsafe OpenGL shenanigans. Here, we compile and link the shaders, set up the VAO
         // and VBO, and set some texture parameters.
         unsafe {
@@ -106,7 +117,7 @@ impl GameWindow {
             gl::GenTextures(1, &mut window.default_texture);
             gl::BindTexture(gl::TEXTURE_2D, window.default_texture);
             gl::TexImage2D(
-                gl::TEXTURE_2D, 0, gl::RGB as GLsizei, 1, 1, 0, gl::RGB as GLuint,
+                gl::TEXTURE_2D, 0, gl::SRGB as GLsizei, 1, 1, 0, gl::RGB as GLuint,
                 gl::UNSIGNED_BYTE, vec_to_addr!(white_tex));
             gl::GenerateMipmap(gl::TEXTURE_2D);
             gl::BindTexture(gl::TEXTURE_2D, 0);
@@ -201,6 +212,11 @@ impl GameWindow {
         }
     }}
 
+    // Sets the gamma of the context.
+    pub fn set_gamma(&mut self, gamma: GLfloat) { unsafe {
+        self.gamma = gamma;
+        uniform_float!(self.program, "gamma", gamma);
+    }}
 
     // Adds a Camera to the engine and returns an integer handle to that camera that can be used
     // with get_camera() and detach_camera().
@@ -212,7 +228,7 @@ impl GameWindow {
                 &Some(_) => (),
             }
         }
-        match index {
+        let handle = match index {
             None => {
                 self.cameras.push(Some(camera));
                 self.cameras.len() - 1
@@ -221,7 +237,29 @@ impl GameWindow {
                 self.cameras[i] = Some(camera);
                 i
             }
-        }
+        };
+        self.update_camera(handle);
+        handle
+    }
+
+    // Updates the camera view matrix and the view uniform on the GPU. This must be called after
+    // any sequence of struct field changes for the changes to appear in-world.
+    pub fn update_camera(&mut self, handle: usize) {
+        let program = self.program.clone();
+        let camera = self.get_camera_mut(handle).unwrap();
+        camera.view = cgmath::Matrix4::look_at(
+                cgmath::Point3::from_vec(camera.pos),
+                cgmath::Point3::from_vec(camera.target),
+                camera.up);
+        unsafe { uniform_vec3!(program, "camera", v3d_to_vec!(camera.pos)) };
+    }
+
+    // Helper method that updates the active camera by calling update_camera().
+    pub fn update_active_camera(&mut self) {
+        let active_camera = match self.active_camera {
+            None => { return; },
+            Some(i) => i };
+        self.update_camera(active_camera);
     }
 
     // Removes a camera from the engine and returns a Result if it was successful.
@@ -235,15 +273,31 @@ impl GameWindow {
         Ok(())
     }
 
-    // Takes in a handle and returns a mut reference to the corresponding camera if it is within
-    // range. Otherwise, return an Err.
-    pub fn get_camera(&mut self, handle: usize) -> Result<&mut camera::PerspectiveCamera, String> {
+    // Takes in a handle and returns a mutable reference to the corresponding camera if it is
+    // within range. Otherwise, return an Err.
+    pub fn get_camera_mut(&mut self, handle: usize)
+            -> Result<&mut camera::PerspectiveCamera, String> {
         if handle >= self.cameras.len() { return Err("Out of range.".to_string()); }
         Ok(self.cameras[handle].as_mut().unwrap())
     }
 
-    // Gets a mut reference to the active camera. Returns Err if no current active camera.
-    pub fn get_active_camera(&mut self) -> Result<&mut camera::PerspectiveCamera, String> {
+    // Takes in a handle and returns an immutable reference to the corresponding camera if it is
+    // within range. Otherwise, return an Err.
+    pub fn get_camera(&self, handle: usize) -> Result<&camera::PerspectiveCamera, String> {
+        if handle >= self.cameras.len() { return Err("Out of range.".to_string()); }
+        Ok(self.cameras[handle].as_ref().unwrap())
+    }
+
+    // Gets a mutable reference to the active camera. Returns Err if no current active camera.
+    pub fn get_active_camera_mut(&mut self) -> Result<&mut camera::PerspectiveCamera, String> {
+        match self.active_camera {
+            None => Err("No currently active camera.".to_string()),
+            Some(c) => self.get_camera_mut(c)
+        }
+    }
+
+    // Gets an immutable reference to the active camera. Returns Err if no current active camera.
+    pub fn get_active_camera(&self) -> Result<&camera::PerspectiveCamera, String> {
         match self.active_camera {
             None => Err("No currently active camera.".to_string()),
             Some(c) => self.get_camera(c)

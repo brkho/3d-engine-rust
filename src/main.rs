@@ -9,6 +9,7 @@ extern crate time;
 use mmo::gfx::color;
 use mmo::gfx::camera;
 use mmo::gfx::camera::Camera;
+use mmo::gfx::camera::EuclideanVector;
 use mmo::gfx::game_window::*;
 use mmo::gfx::light;
 use mmo::gfx::material;
@@ -28,17 +29,14 @@ fn main() {
     // let budda = obj::decode_obj("budda.obj").unwrap();
     // let dragon = obj::decode_obj("dragon.obj").unwrap();
     let mut window = GameWindow::new(800, 600, "Engine Test".to_string()).unwrap();
-    let program = window.program;
     window.bg_color = color::Color::new_rgb(0.2, 0.2, 0.2);
 
-    let mut camera1 = camera::PerspectiveCamera::new(
+    let camera1 = camera::PerspectiveCamera::new(
             Vector3D::new(17.0, 17.0, 17.0), Vector3D::new(0.0, 0.0, 0.0),
             window.get_aspect_ratio(), 45.0, 0.1, 100.0);
-    camera1.update(program);
-    let mut camera2 = camera::PerspectiveCamera::new(
-            Vector3D::new(0.00001, 0.0, 30.0), Vector3D::new(0.0, 0.0, 0.0),
+    let camera2 = camera::PerspectiveCamera::new(
+            Vector3D::new(0.0001, 0.0, 30.0), Vector3D::new(0.0, 0.0, 0.0),
             window.get_aspect_ratio(), 45.0, 0.1, 100.0);
-    camera2.update(program);
     let main_camera = window.attach_camera(camera1);
     let secondary_camera = window.attach_camera(camera2);
     window.set_active_camera(main_camera).unwrap();
@@ -125,8 +123,7 @@ fn main() {
         }
 
         // Update Camera.
-        {
-            if shift_pressed == 0 {
+        {   if shift_pressed == 0 {
                 window.set_active_camera(main_camera).unwrap();
             } else {
                 window.set_active_camera(secondary_camera).unwrap();
@@ -134,15 +131,14 @@ fn main() {
             }
             let x_dir = (right_pressed - left_pressed) as f32 * 5.0 * dt;
             let y_dir = (up_pressed - down_pressed) as f32 * 5.0 * dt;
-            let mut camera = window.get_active_camera().unwrap();
+            let mut camera = window.get_active_camera_mut().unwrap();
             let cam_dir = camera.get_fwd();
-            let fwd = Vector3D::new(cam_dir[0], cam_dir[1], 0.0);
+            let fwd = Vector3D::new(cam_dir[0], cam_dir[1], 0.0).normalize();
             let right = camera.get_right();
             let dir = right * x_dir + fwd * -y_dir;
             camera.pos = camera.pos + dir;
-            camera.target = camera.target + dir;
-            camera.update(program);
-        }
+            camera.target = camera.target + dir; }
+        window.update_active_camera();
 
         // Update Objects.
         lb1_inst.pos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 4.0);
@@ -156,10 +152,10 @@ fn main() {
         //     light.intensity = color::Color::new_rgb(intensity, intensity, intensity); }
         // window.update_spot_light(spot_handle);
 
-        {   let mut light = window.get_directional_light_mut(dir_handle);
-            let intensity = ((elapsed_time * 10.0).sin() + 1.0) / 2.0;
-            light.intensity = color::Color::new_rgb(intensity, intensity, intensity); }
-        window.update_directional_light(dir_handle);
+        // {   let mut light = window.get_directional_light_mut(dir_handle);
+        //     let intensity = ((elapsed_time * 5.0).sin() + 1.0) / 2.0;
+        //     light.intensity = color::Color::new_rgb(intensity, intensity, intensity); }
+        // window.update_directional_light(dir_handle);
 
         {   let mut light = window.get_point_light_mut(pl1_handle);
             let lpos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 4.0);

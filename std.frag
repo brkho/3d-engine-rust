@@ -33,6 +33,7 @@ uniform vec4 color;
 uniform mat4 model;
 uniform mat4 normal;
 uniform float specular_coeff;
+uniform float gamma;
 uniform sampler2D diffuse_map;
 uniform sampler2D specular_map;
 uniform sampler2D normal_map;
@@ -221,5 +222,6 @@ void main() {
         total_color += diffuse + specular;
     }
 
-    out_color = clamp(total_color, 0.0, 1.0);
+    vec4 final_color = clamp(total_color, 0.0, 1.0);
+    out_color = final_color;
 }

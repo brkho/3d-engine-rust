@@ -29,16 +29,18 @@ impl Material {
                 color::Color::new_rgb(1.0, 1.0, 1.0), shininess)
     }
 
-    // Reads and binds a BMP texture given a name and returns the corresponding texture ID.
-    fn read_and_bind(texture_name: Option<String>) -> GLuint { unsafe {
+    // Reads and binds a BMP texture given a name and returns the corresponding texture ID. This
+    // method also lets the caller specify if the texture should be in sRGB space or not.
+    fn read_and_bind(texture_name: Option<String>, srgb: bool) -> GLuint { unsafe {
         if let Some(name) = texture_name {
             let texture = bmp::decode_bmp(name).unwrap();
             let image = texture.get_rgba_vec();
             let mut texture_id = 0;
             gl::GenTextures(1, &mut texture_id);
             gl::BindTexture(gl::TEXTURE_2D, texture_id);
+            let color_space = if srgb { gl::SRGB_ALPHA } else { gl::RGBA };
             gl::TexImage2D(
-                    gl::TEXTURE_2D, 0, gl::RGBA as GLsizei, texture.width as GLsizei,
+                    gl::TEXTURE_2D, 0, color_space as GLsizei, texture.width as GLsizei,
                     texture.height as GLint, 0, gl::RGBA as GLuint, gl::UNSIGNED_BYTE,
                     vec_to_addr!(image));
             gl::GenerateMipmap(gl::TEXTURE_2D);
@@ -49,10 +51,10 @@ impl Material {
     // Creates a Material with paths to diffuse and specular maps, shiniess, and color.
     pub fn new_with_color(diffuse_name: Option<String>, specular_name: Option<String>,
             normal_name: Option<String>, color: color::Color, shininess: GLfloat) -> Material {
-        let diffuse = Material::read_and_bind(diffuse_name);
-        let specular = Material::read_and_bind(specular_name);
+        let diffuse = Material::read_and_bind(diffuse_name, true);
+        let specular = Material::read_and_bind(specular_name, false);
         // TODO: Just use the rgb vec.
-        let normal = Material::read_and_bind(normal_name);
+        let normal = Material::read_and_bind(normal_name, false);
         Material { color: color, diffuse: diffuse, specular: specular, normal: normal,
                 shininess: shininess }
     }

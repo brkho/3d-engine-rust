@@ -9,9 +9,10 @@
 extern crate cgmath;
 extern crate gl;
 
+pub use self::cgmath::EuclideanVector;
+
 use gfx::types::*;
-use self::cgmath::{EuclideanVector, Point, SquareMatrix};
-use std::ffi::CString;
+use self::cgmath::SquareMatrix;
 
 // Specifies methods for getting the view and projection matrices.
 pub trait Camera {
@@ -26,9 +27,9 @@ pub trait Camera {
 pub struct PerspectiveCamera {
     pub pos: Vector3D,
     pub target: Vector3D,
+    pub view: cgmath::Matrix4<GLfloat>,
+    pub up: Vector3D,
     proj: cgmath::Matrix4<GLfloat>,
-    view: cgmath::Matrix4<GLfloat>,
-    up: Vector3D,
 }
 
 // Implementation of the Camera methods for PerspectiveCamera.
@@ -75,16 +76,6 @@ impl PerspectiveCamera {
         let dummy_view = cgmath::Matrix4::identity();
         PerspectiveCamera { pos: pos, target: target,
                 up: up, proj: cgmath::Matrix4::from(proj), view: dummy_view }
-    }
-
-    // Updates the camera view matrix and the view uniform on the GPU. This must be called after
-    // any sequence of struct field changes for the changes to appear in-world.
-    pub fn update(&mut self, program: u32) {
-        self.view = cgmath::Matrix4::look_at(
-                cgmath::Point3::from_vec(self.pos),
-                cgmath::Point3::from_vec(self.target),
-                self.up);
-        unsafe { uniform_vec3!(program, "camera", v3d_to_vec!(self.pos)) };
     }
 }
 
