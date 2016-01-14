@@ -23,15 +23,15 @@ pub struct Material {
 impl Material {
     // Default constructor that automatically assigns a white color given a shininess and paths to
     // the diffuse and specular maps as BMPs.
-    pub fn new(diffuse_name: Option<String>, specular_name: Option<String>,
-            normal_name: Option<String>, shininess: GLfloat) -> Material {
+    pub fn new(diffuse_name: Option<&str>, specular_name: Option<&str>,
+            normal_name: Option<&str>, shininess: GLfloat) -> Material {
         Material::new_with_color(diffuse_name, specular_name, normal_name,
                 color::Color::new_rgb(1.0, 1.0, 1.0), shininess)
     }
 
     // Reads and binds a BMP texture given a name and returns the corresponding texture ID. This
     // method also lets the caller specify if the texture should be in sRGB space or not.
-    fn read_and_bind(texture_name: Option<String>, srgb: bool) -> GLuint { unsafe {
+    fn read_and_bind(texture_name: Option<&str>, srgb: bool) -> GLuint { unsafe {
         if let Some(name) = texture_name {
             let texture = bmp::decode_bmp(name).unwrap();
             let image = texture.get_rgba_vec();
@@ -49,8 +49,8 @@ impl Material {
     }}
 
     // Creates a Material with paths to diffuse and specular maps, shiniess, and color.
-    pub fn new_with_color(diffuse_name: Option<String>, specular_name: Option<String>,
-            normal_name: Option<String>, color: color::Color, shininess: GLfloat) -> Material {
+    pub fn new_with_color(diffuse_name: Option<&str>, specular_name: Option<&str>,
+            normal_name: Option<&str>, color: color::Color, shininess: GLfloat) -> Material {
         let diffuse = Material::read_and_bind(diffuse_name, true);
         let specular = Material::read_and_bind(specular_name, false);
         // TODO: Just use the rgb vec.

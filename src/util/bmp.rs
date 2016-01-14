@@ -168,7 +168,7 @@ fn read_pixel_array(data: &Vec<u8>, cursor: &mut usize, info: &DIBHeader)
 
 // Decodes a BMP given a path to the file and returns a DecodedBMP struct containing the pixel
 // information, width, and height of the image.
-pub fn decode_bmp(fpath: String) -> Result<DecodedBMP, String> {
+pub fn decode_bmp(fpath: &str) -> Result<DecodedBMP, String> {
     let mut data = Vec::new();
     let mut fd = try!(File::open(fpath).map_err(|e| e.to_string()));
     try!(fd.read_to_end(&mut data).map_err(|e| e.to_string()));

@@ -24,6 +24,7 @@ use self::glutin::{Window, WindowBuilder};
 use std::cmp;
 use std::ffi::CString;
 use std::mem;
+use std::path;
 use std::ptr;
 use std::rc::Rc;
 
@@ -35,6 +36,11 @@ const MAX_LIGHTS: usize = 8;
 
 // The default gamma of the scene.
 const DEFAULT_GAMMA: GLfloat = 2.2;
+
+// The default shader directory and names.
+const SHADER_DIR: &'static str = "shaders";
+const VERTEX_SHADER_NAME: &'static str = "std.vert";
+const FRAGMENT_SHADER_NAME: &'static str = "std.frag";
 
 // Contents of a VBO.
 // [P_x  P_y  P_z  N_x  N_y  N_z  T_u  T_v]
@@ -93,8 +99,12 @@ impl GameWindow {
         // Begin unsafe OpenGL shenanigans. Here, we compile and link the shaders, set up the VAO
         // and VBO, and set some texture parameters.
         unsafe {
-            let vs = shader::compile_shader("std.vert", gl::VERTEX_SHADER);
-            let fs = shader::compile_shader("std.frag", gl::FRAGMENT_SHADER);
+            let mut vpath = path::PathBuf::from(SHADER_DIR);
+            vpath.push(VERTEX_SHADER_NAME);
+            let mut fpath = path::PathBuf::from(SHADER_DIR);
+            fpath.push(FRAGMENT_SHADER_NAME);
+            let vs = shader::compile_shader(vpath.to_str().unwrap(), gl::VERTEX_SHADER);
+            let fs = shader::compile_shader(fpath.to_str().unwrap(), gl::FRAGMENT_SHADER);
             window.program = shader::link_program(vs, fs);
             gl::GenVertexArrays(1, &mut window.working_vao);
             window.initialize_vbo(0);

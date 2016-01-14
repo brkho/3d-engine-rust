@@ -17,15 +17,22 @@ use mmo::gfx::model;
 use mmo::gfx::types::*;
 use mmo::util::obj;
 
+use std::path;
 use std::process;
 use std::rc::Rc;
 use std::thread::sleep;
 use std::time::Duration;
 
+// Macro to easily get asset strings.
+macro_rules! asset { ($s:expr) => {{
+    let mut path = path::PathBuf::from("assets");
+    path.push($s);
+    &path.to_str().unwrap().to_string() }};}
+
 // Driver test program.
 fn main() {
-    let ground = obj::decode_obj("ground.obj").unwrap();
-    let bunny = obj::decode_obj("plane.obj").unwrap();
+    let ground = obj::decode_obj(asset!("ground.obj")).unwrap();
+    let bunny = obj::decode_obj(asset!("plane.obj")).unwrap();
     // let budda = obj::decode_obj("budda.obj").unwrap();
     // let dragon = obj::decode_obj("dragon.obj").unwrap();
     let mut window = GameWindow::new(800, 600, "Engine Test".to_string()).unwrap();
@@ -41,8 +48,8 @@ fn main() {
     let secondary_camera = window.attach_camera(camera2);
     window.set_active_camera(main_camera).unwrap();
 
-    let bunny_mat = material::Material::new_with_color(Some("stone_diffuse.bmp".to_string()),
-            Some("stone_specular.bmp".to_string()), Some("stone_normal.bmp".to_string()),
+    let bunny_mat = material::Material::new_with_color(Some(asset!("stone_diffuse.bmp")),
+            Some(asset!("stone_specular.bmp")), Some(asset!("stone_normal.bmp")),
             color::Color::new_rgb(1.0, 1.0, 1.0), 75.0);
     let bunny_info = Rc::new(model::ModelInfo::from_obj(&bunny, bunny_mat));
     let mut bunny_inst = model::ModelInstance::from(bunny_info.clone());
@@ -50,8 +57,8 @@ fn main() {
     bunny_inst.pos = Vector3D::new(0.0, 0.0, 0.0);
     bunny_inst.update();
 
-    let ground_mat = material::Material::new_with_color(Some("box_diffuse.bmp".to_string()),
-            Some("box_spec.bmp".to_string()), None,
+    let ground_mat = material::Material::new_with_color(Some(asset!("box_diffuse.bmp")),
+            Some(asset!("box_spec.bmp")), None,
             color::Color::new_rgb(1.0, 1.0, 1.0), 140.0);
     let ground_info = Rc::new(model::ModelInfo::from_obj(&ground, ground_mat));
     let mut ground_inst = model::ModelInstance::from(ground_info.clone());
@@ -59,7 +66,7 @@ fn main() {
     ground_inst.pos = Vector3D::new(0.0, 0.0, -1.5);
     ground_inst.update();
 
-    // let dragon_mat = material::Material::new_with_color(Some("uvs.bmp".to_string()),
+    // let dragon_mat = material::Material::new_with_color(Some(asset!("uvs.bmp")),
     //     None, None,
     //     color::Color::new_rgb(1.0, 1.0, 1.0), 175.0);
     // let dragon_info = Rc::new(model::ModelInfo::from_obj(&dragon, dragon_mat));
@@ -68,7 +75,7 @@ fn main() {
     // dragon_inst.pos = Vector3D::new(4.0, -4.0, 0.0);
     // dragon_inst.update();
 
-    // let budda_mat = material::Material::new_with_color(Some("brian.bmp".to_string()),
+    // let budda_mat = material::Material::new_with_color(Some(asset!("brian.bmp")),
     //         None, None,
     //         color::Color::new_rgb(1.0, 1.0, 1.0), 175.0);
     // let budda_info = Rc::new(model::ModelInfo::from_obj(&budda, budda_mat));
