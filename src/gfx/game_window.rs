@@ -89,9 +89,6 @@ impl GameWindow {
                 active_camera: None, gen: 0, bound_vao: None, vbos: Vec::new(), ebos: Vec::new(),
                 vaos: Vec::new(), working_vao: 0, light_indices: lights, default_texture: 0,
                 gamma: 0.0 };
-        window.set_gamma(DEFAULT_GAMMA);
-
-        unsafe { gl::Enable(gl::FRAMEBUFFER_SRGB); };
 
         // Begin unsafe OpenGL shenanigans. Here, we compile and link the shaders, set up the VAO
         // and VBO, and set some texture parameters.
@@ -105,6 +102,7 @@ impl GameWindow {
             gl::Enable(gl::DEPTH_TEST);
             gl::UseProgram(window.program);
             gl::BindFragDataLocation(window.program, 0, gl_str!("out_color"));
+            window.set_gamma(DEFAULT_GAMMA);
 
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as GLint);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as GLint);
