@@ -31,6 +31,8 @@ pub struct Vertex {
     pub pos: Vector3<GLfloat>,
     pub norm: Vector3<GLfloat>,
     pub tc: Vector2<GLfloat>,
+    pub bitangent: Vector3<GLfloat>,
+    pub tangent: Vector3<GLfloat>,
 }
 
 // Process a vertex and return a Vector3 from its components.
@@ -103,9 +105,34 @@ fn process_face(info: &[&str], vertices: &Vec<Vector3<GLfloat>>, normals: &Vec<V
                     Vector2::new(0.0, 0.0) } else { tcoords[triplet.1 as usize - 1] }.clone();
             let n = normals[triplet.2 as usize - 1].clone();
             vmap.insert(triplet.clone(), vlist.len() as u32);
-            vlist.push(Vertex { pos: v, tc: t, norm: n });
+            vlist.push(Vertex { pos: v, tc: t, norm: n, bitangent: Vector3::new(0.0, 0.0, 0.0),
+                    tangent: Vector3::new(0.0, 0.0, 0.0) });
         }
         elems.push(vmap.get(&triplet).unwrap().clone());
+    }
+
+    // Get tangent and bitangent.
+    let e1 = vlist[elems[1] as usize].pos - vlist[elems[0] as usize].pos;
+    let e2 = vlist[elems[2] as usize].pos - vlist[elems[0] as usize].pos;
+    let duv1 = vlist[elems[1] as usize].tc - vlist[elems[0] as usize].tc;
+    let duv2 = vlist[elems[2] as usize].tc - vlist[elems[0] as usize].tc;
+    let det = 1.0 / (duv1.x * duv2.y - duv1.y * duv2.x);
+    let t1 = det * (duv2.y * e1.x - duv2.x * e2.x);
+    let t2 = det * (duv2.y * e1.y - duv2.x * e2.y);
+    let t3 = det * (duv2.y * e1.z - duv2.x * e2.z);
+    let b1 = det * (-duv1.y * e1.x + duv1.x * e2.x);
+    let b2 = det * (-duv1.y * e1.y + duv1.x * e2.y);
+    let b3 = det * (-duv1.y * e1.z + duv1.x * e2.z);
+    let tangent = Vector3::new(t1, t2, t3).normalize();
+    let bitangent = Vector3::new(b1, b2, b3).normalize();
+
+    let triangle_area = e1.cross(e2).length() * 0.5;
+    // let angle_between = e1.angle(e2).s;
+    for i in 0..3 {
+        let new_bitangent = vlist[elems[i] as usize].bitangent + (bitangent * triangle_area);
+        vlist[elems[i] as usize].bitangent = new_bitangent;
+        let new_tangent = vlist[elems[i] as usize].tangent + (tangent * triangle_area);
+        vlist[elems[i] as usize].tangent = new_tangent;
     }
     Ok((elems[0], elems[1], elems[2]))
 }
@@ -137,6 +164,13 @@ pub fn decode_obj(fpath: &str) -> Result<DecodedOBJ, String> {
             _ => (),
         }
     }
+
+    for vertex in vlist.iter_mut() {
+        vertex.tangent = vertex.tangent.normalize();
+        vertex.bitangent = vertex.bitangent.normalize();
+        // println!("normal: {:?}\ncalculated normal: {:?}\ntangent: {:?}\nbitangent: {:?}\n", vertex.norm, vertex.tangent.cross(vertex.bitangent).normalize(), vertex.tangent, vertex.bitangent);
+    }
+
     Ok(DecodedOBJ { vertices: vlist, elements: elements })
 }
 

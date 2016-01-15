@@ -45,8 +45,8 @@ void main() {
     Light light = lights[7];
     if (light.type != EMPTY_LIGHT) {
         vec3 position = vec3(model * vec4(Vert, 1.0));
-        vec3 norm = normalize(mat3(normal) * ((texture(normal_map, TCoord).rgb - 0.5) * 2));
-        // vec3 norm = normalize(mat3(normal) * Normal);
+        // vec3 norm = normalize(mat3(normal) * ((texture(normal_map, TCoord).rgb - 0.5) * 2));
+        vec3 norm = normalize(mat3(normal) * Normal);
         vec3 surface_to_light;
         vec3 intensity;
 
@@ -85,14 +85,14 @@ void main() {
         }
 
         // Get total lighting.
-        total_color += diffuse + specular;
+        total_color += diffuse;
     }
 
     light = lights[6];
     if (light.type != EMPTY_LIGHT) {
         vec3 position = vec3(model * vec4(Vert, 1.0));
-        vec3 norm = normalize(mat3(normal) * ((texture(normal_map, TCoord).rgb - 0.5) * 2));
-        // vec3 norm = normalize(mat3(normal) * Normal);
+        // vec3 norm = normalize(mat3(normal) * ((texture(normal_map, TCoord).rgb - 0.5) * 2));
+        vec3 norm = normalize(mat3(normal) * Normal);
         vec3 surface_to_light;
         vec3 intensity;
 
@@ -131,14 +131,14 @@ void main() {
         }
 
         // Get total lighting.
-        total_color += diffuse + specular;
+        total_color += diffuse;
     }
 
     light = lights[5];
     if (light.type != EMPTY_LIGHT) {
         vec3 position = vec3(model * vec4(Vert, 1.0));
-        vec3 norm = normalize(mat3(normal) * ((texture(normal_map, TCoord).rgb - 0.5) * 2));
-        // vec3 norm = normalize(mat3(normal) * Normal);
+        // vec3 norm = normalize(mat3(normal) * ((texture(normal_map, TCoord).rgb - 0.5) * 2));
+        vec3 norm = normalize(mat3(normal) * Normal);
         vec3 surface_to_light;
         vec3 intensity;
 
@@ -177,7 +177,7 @@ void main() {
         }
 
         // Get total lighting.
-        total_color += diffuse + specular;
+        total_color += diffuse;
     }
 
     vec4 final_color = clamp(total_color, 0.0, 1.0);

@@ -32,6 +32,7 @@ macro_rules! asset { ($s:expr) => {{
 // Driver test program.
 fn main() {
     let ground = obj::decode_obj(asset!("ground.obj")).unwrap();
+    let test = obj::decode_obj(asset!("box.obj")).unwrap();
     let bunny = obj::decode_obj(asset!("plane.obj")).unwrap();
     // let budda = obj::decode_obj("budda.obj").unwrap();
     // let dragon = obj::decode_obj("dragon.obj").unwrap();
@@ -66,6 +67,15 @@ fn main() {
     ground_inst.pos = Vector3D::new(0.0, 0.0, -1.5);
     ground_inst.update();
 
+    let test_mat = material::Material::new_with_color(None,
+            None, None,
+            color::Color::new_rgb(1.0, 1.0, 0.0), 75.0);
+    let test_info = Rc::new(model::ModelInfo::from_obj(&test, test_mat));
+    let mut test_inst = model::ModelInstance::from(test_info.clone());
+    test_inst.scale = 10.0;
+    test_inst.pos = Vector3D::new(0.0, 0.0, 0.25);
+    test_inst.update();
+
     // let dragon_mat = material::Material::new_with_color(Some(asset!("uvs.bmp")),
     //     None, None,
     //     color::Color::new_rgb(1.0, 1.0, 1.0), 175.0);
@@ -93,18 +103,18 @@ fn main() {
     let mut lb2_inst = model::ModelInstance::from(lb.clone());
     lb2_inst.update();
 
-    let spot_obj = light::SpotLight::new(color::Color::new_rgb(0.3, 0.3, 0.3),
-            Vector3D::new(0.0, 15.0, 15.0), Vector3D::new(0.0, -1.0, -1.0), 1.0, 0.0, 0.0, 0.4,
-            42.0);
-    let spot_handle = window.attach_spot_light(spot_obj);
+    // let spot_obj = light::SpotLight::new(color::Color::new_rgb(0.3, 0.3, 0.3),
+    //         Vector3D::new(0.0, 15.0, 15.0), Vector3D::new(0.0, -1.0, -1.0), 1.0, 0.0, 0.0, 0.4,
+    //         42.0);
+    // let spot_handle = window.attach_spot_light(spot_obj);
 
     let dir_obj = light::DirectionalLight::new(color::Color::new_rgb(1.0, 1.0, 1.0),
-            Vector3D::new(-1.0, -1.0, -1.0));
+            Vector3D::new(0.0, 0.0, -1.0));
     let dir_handle = window.attach_directional_light(dir_obj);
 
-    let pl1_obj = light::PointLight::new(color::Color::new_rgb(1.0, 1.0, 1.0),
-            Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.03, 0.004);
-    let pl1_handle = window.attach_point_light(pl1_obj);
+    // let pl1_obj = light::PointLight::new(color::Color::new_rgb(1.0, 1.0, 1.0),
+    //         Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.03, 0.004);
+    // let pl1_handle = window.attach_point_light(pl1_obj);
 
     // let point_light2 = window.attach_point_light(
     //         color::Color::new_rgb(1.0, 1.0, 1.0),
@@ -144,11 +154,11 @@ fn main() {
             let right = camera.get_right();
             let dir = right * x_dir + fwd * -y_dir;
             camera.pos = camera.pos + dir;
-            camera.target = camera.target + dir; }
+            camera.target = camera.target; }
         window.update_active_camera();
 
         // Update Objects.
-        lb1_inst.pos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 4.0);
+        lb1_inst.pos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 1.0);
         lb1_inst.update();
         lb2_inst.pos = Vector3D::new(0.0, 10.0 * (1.43 * elapsed_time).sin(),
                 10.0 * (1.43 * elapsed_time).cos());
@@ -164,10 +174,10 @@ fn main() {
         //     light.intensity = color::Color::new_rgb(intensity, intensity, intensity); }
         // window.update_directional_light(dir_handle);
 
-        {   let mut light = window.get_point_light_mut(pl1_handle);
-            let lpos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 4.0);
-            light.position = lpos; }
-        window.update_point_light(pl1_handle);
+        // {   let mut light = window.get_point_light_mut(pl1_handle);
+        //     let lpos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 1.0);
+        //     light.position = lpos; }
+        // window.update_point_light(pl1_handle);
 
         // {   let mut light = window.get_point_light(point_light2);
         //     let lpos = Vector3D::new(0.0, 10.0 * (1.43 * elapsed_time).sin(),
@@ -178,8 +188,9 @@ fn main() {
 
         // Draw Objects.
         window.clear();
-        window.draw_instance(&bunny_inst);
+        // window.draw_instance(&bunny_inst);
         window.draw_instance(&lb1_inst);
+        window.draw_instance(&test_inst);
         // window.draw_instance(&lb2_inst);
         // window.draw_instance(&ground_inst);
         // window.draw_instance(&budda_inst);
