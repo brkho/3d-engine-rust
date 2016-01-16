@@ -15,7 +15,7 @@ extern crate gl;
 
 use self::cgmath::*;
 use self::gl::types::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader};
 use std::fs::File;
 use std::str::FromStr;
@@ -33,6 +33,14 @@ pub struct Vertex {
     pub tc: Vector2<GLfloat>,
     pub bitangent: Vector3<GLfloat>,
     pub tangent: Vector3<GLfloat>,
+}
+
+// Helper struct used to hold information about shared vertices and their shared normals, tangents,
+// and bitangents.
+struct SharedVertex {
+    bitangent: Vector3<GLfloat>,
+    tangent: Vector3<GLfloat>,
+    vertices: HashSet<usize>,
 }
 
 // Process a vertex and return a Vector3 from its components.
@@ -92,18 +100,32 @@ fn process_triplet(triplet: &str) -> Result<(u32, u32, u32), String> {
 // tangent and bitangent based on a face and angle weighted average.
 fn process_face(info: &[&str], vertices: &Vec<Vector3<GLfloat>>, normals: &Vec<Vector3<GLfloat>>,
         tcoords: &Vec<Vector2<GLfloat>>, vlist: &mut Vec<Vertex>,
-        vmap: &mut HashMap<(u32, u32, u32), u32>) -> Result<(u32, u32, u32), String> {
+        vmap: &mut HashMap<(u32, u32, u32), u32>, nmap: &mut HashMap<u32, SharedVertex>)
+        -> Result<(u32, u32, u32), String> {
     if info.len() != 3 {
         return Err("The decoder only supports triangle meshes.".to_string());
     }
     let mut elems = Vec::new();
+    let mut t_vertices = Vec::new();
     for i in 0..3 {
         let triplet = try!(process_triplet(info[i]));
+        t_vertices.push(triplet.0);
         if !vmap.contains_key(&triplet) {
+            // TODO: Make this code actually efficient and not just one giant hack with hashes.
+            if !nmap.contains_key(&triplet.0) {
+                let shared_vertex = SharedVertex {
+                    bitangent: Vector3::new(0.0, 0.0, 0.0), tangent: Vector3::new(0.0, 0.0, 0.0),
+                    vertices: HashSet::new() };
+                nmap.insert(triplet.0, shared_vertex);
+            }
+            let mut shared_vertex = nmap.get_mut(&triplet.0).unwrap();
+            shared_vertex.vertices.insert(vlist.len());
+
             let v = vertices[triplet.0 as usize - 1].clone();
             let t = if triplet.1 == 0 {
                     Vector2::new(0.0, 0.0) } else { tcoords[triplet.1 as usize - 1] }.clone();
             let n = normals[triplet.2 as usize - 1].clone();
+
             vmap.insert(triplet.clone(), vlist.len() as u32);
             vlist.push(Vertex { pos: v, tc: t, norm: n, bitangent: Vector3::new(0.0, 0.0, 0.0),
                     tangent: Vector3::new(0.0, 0.0, 0.0) });
@@ -111,28 +133,30 @@ fn process_face(info: &[&str], vertices: &Vec<Vector3<GLfloat>>, normals: &Vec<V
         elems.push(vmap.get(&triplet).unwrap().clone());
     }
 
-    // Get tangent and bitangent.
     let e1 = vlist[elems[1] as usize].pos - vlist[elems[0] as usize].pos;
     let e2 = vlist[elems[2] as usize].pos - vlist[elems[0] as usize].pos;
     let duv1 = vlist[elems[1] as usize].tc - vlist[elems[0] as usize].tc;
     let duv2 = vlist[elems[2] as usize].tc - vlist[elems[0] as usize].tc;
+
     let det = 1.0 / (duv1.x * duv2.y - duv1.y * duv2.x);
-    let t1 = det * (duv2.y * e1.x - duv2.x * e2.x);
-    let t2 = det * (duv2.y * e1.y - duv2.x * e2.y);
-    let t3 = det * (duv2.y * e1.z - duv2.x * e2.z);
-    let b1 = det * (-duv1.y * e1.x + duv1.x * e2.x);
-    let b2 = det * (-duv1.y * e1.y + duv1.x * e2.y);
-    let b3 = det * (-duv1.y * e1.z + duv1.x * e2.z);
+    let t1 = det * (duv2.y * e1.x - duv1.y * e2.x);
+    let t2 = det * (duv2.y * e1.y - duv1.y * e2.y);
+    let t3 = det * (duv2.y * e1.z - duv1.y * e2.z);
+    let b1 = det * (-duv2.x * e1.x + duv1.x * e2.x);
+    let b2 = det * (-duv2.x * e1.y + duv1.x * e2.y);
+    let b3 = det * (-duv2.x * e1.z + duv1.x * e2.z);
+
     let tangent = Vector3::new(t1, t2, t3).normalize();
     let bitangent = Vector3::new(b1, b2, b3).normalize();
 
     let triangle_area = e1.cross(e2).length() * 0.5;
-    // let angle_between = e1.angle(e2).s;
+    // // Update vertex normals.
     for i in 0..3 {
-        let new_bitangent = vlist[elems[i] as usize].bitangent + (bitangent * triangle_area);
-        vlist[elems[i] as usize].bitangent = new_bitangent;
-        let new_tangent = vlist[elems[i] as usize].tangent + (tangent * triangle_area);
-        vlist[elems[i] as usize].tangent = new_tangent;
+        let mut shared_vertex = nmap.get_mut(&t_vertices[i]).unwrap();
+        let new_tangent = shared_vertex.tangent + (tangent * triangle_area);
+        let new_bitangent = shared_vertex.bitangent + (bitangent * triangle_area);
+        shared_vertex.tangent = new_tangent;
+        shared_vertex.bitangent = new_bitangent;
     }
     Ok((elems[0], elems[1], elems[2]))
 }
@@ -148,6 +172,7 @@ pub fn decode_obj(fpath: &str) -> Result<DecodedOBJ, String> {
     let mut elements: Vec<(u32, u32, u32)> = Vec::new();
     let mut vlist: Vec<Vertex> = Vec::new();
     let mut vmap: HashMap<(u32, u32, u32), u32> = HashMap::new();
+    let mut nmap: HashMap<u32, SharedVertex> = HashMap::new();
     for line_opt in reader.lines() {
         let line = line_opt.unwrap();
         let split: Vec<_> = line.split(char::is_whitespace).collect();
@@ -160,15 +185,22 @@ pub fn decode_obj(fpath: &str) -> Result<DecodedOBJ, String> {
             "vn" => { normals.push(try!(process_normal(args))) },
             "f" => {
                 elements.push(try!(process_face(
-                        args, &vertices, &normals, &tcoords, &mut vlist, &mut vmap))); },
+                        args, &vertices, &normals, &tcoords, &mut vlist,
+                        &mut vmap, &mut nmap))); },
             _ => (),
         }
     }
 
+    for (_, shared_vertex) in nmap.iter() {
+        let n_tangent = shared_vertex.tangent.normalize();
+        let n_bitangent = shared_vertex.bitangent.normalize();
+        for vid in shared_vertex.vertices.iter() {
+            vlist[vid.clone()].tangent = n_tangent;
+            vlist[vid.clone()].bitangent = n_bitangent;
+        }
+    }
     for vertex in vlist.iter_mut() {
-        vertex.tangent = vertex.tangent.normalize();
-        vertex.bitangent = vertex.bitangent.normalize();
-        // println!("normal: {:?}\ncalculated normal: {:?}\ntangent: {:?}\nbitangent: {:?}\n", vertex.norm, vertex.tangent.cross(vertex.bitangent).normalize(), vertex.tangent, vertex.bitangent);
+        println!("name: {}\nnormal: {:?}\ncalculated normal: {:?}\ntangent: {:?}\nbitangent: {:?}\n", fpath, vertex.norm.normalize(), vertex.tangent.cross(vertex.bitangent).normalize(), vertex.tangent, vertex.bitangent);
     }
 
     Ok(DecodedOBJ { vertices: vlist, elements: elements })

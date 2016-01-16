@@ -46,8 +46,11 @@ const FRAGMENT_SHADER_NAME: &'static str = "std.frag";
 // [P_x  P_y  P_z  N_x  N_y  N_z  T_u  T_v]
 const VERTEX_POS_SIZE: usize = 3;
 const VERTEX_NORMAL_SIZE: usize = 3;
+const VERTEX_TANGENT_SIZE: usize = 3;
+const VERTEX_BITANGENT_SIZE: usize = 3;
 const VERTEX_TCOORD_SIZE: usize = 2;
-const VERTEX_SIZE: usize = VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE + VERTEX_TCOORD_SIZE;
+const VERTEX_SIZE: usize = VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE + VERTEX_TANGENT_SIZE +
+        VERTEX_BITANGENT_SIZE + VERTEX_TCOORD_SIZE;
 
 // A window for graphics drawing that is managed by the graphics module. This is a thin wrapper
 // around the glutin Window class and will manage draws to the glutin window.
@@ -207,14 +210,29 @@ impl GameWindow {
                         normal_attr as GLuint, VERTEX_NORMAL_SIZE as i32, gl::FLOAT,
                         gl::FALSE as GLboolean, float_size!(VERTEX_SIZE, GLsizei),
                         float_size!(VERTEX_POS_SIZE, CVoid));
+
+                let tangent_attr = gl::GetAttribLocation(self.program, gl_str!("tangent"));
+                gl::EnableVertexAttribArray(tangent_attr as GLuint);
+                gl::VertexAttribPointer(
+                        tangent_attr as GLuint, VERTEX_TANGENT_SIZE as i32, gl::FLOAT,
+                        gl::FALSE as GLboolean, float_size!(VERTEX_SIZE, GLsizei),
+                        float_size!(VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE, CVoid));
+
+                let bitangent_attr = gl::GetAttribLocation(self.program, gl_str!("bitangent"));
+                gl::EnableVertexAttribArray(bitangent_attr as GLuint);
+                gl::VertexAttribPointer(
+                        bitangent_attr as GLuint, VERTEX_BITANGENT_SIZE as i32, gl::FLOAT,
+                        gl::FALSE as GLboolean, float_size!(VERTEX_SIZE, GLsizei),
+                        float_size!(VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE + VERTEX_TANGENT_SIZE,
+                        CVoid));
+
                 let tcoord_attr = gl::GetAttribLocation(self.program, gl_str!("tcoord"));
                 gl::EnableVertexAttribArray(tcoord_attr as GLuint);
                 gl::VertexAttribPointer(
                         tcoord_attr as GLuint, VERTEX_TCOORD_SIZE as i32, gl::FLOAT,
                         gl::FALSE as GLboolean, float_size!(VERTEX_SIZE, GLsizei),
-                        float_size!(VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE, CVoid));
-                let color_attr = gl::GetAttribLocation(self.program, gl_str!("color"));
-                gl::EnableVertexAttribArray(color_attr as GLuint);
+                        float_size!(VERTEX_POS_SIZE + VERTEX_NORMAL_SIZE + VERTEX_TANGENT_SIZE
+                        + VERTEX_BITANGENT_SIZE, CVoid));
                 vao
             },
         }
@@ -626,7 +644,7 @@ impl GameWindow {
             self.bind_vao_checked(info.vao);
             uniform_mat4!(self.program, "transform", transform);
             uniform_mat4!(self.program, "model", instance.model);
-            uniform_mat4!(self.program, "normal", instance.normal);
+            uniform_mat4!(self.program, "normal_matrix", instance.normal);
             gl::ActiveTexture(gl::TEXTURE0);
             let diffuse_id = if mat.diffuse == 0 { self.default_texture } else { mat.diffuse };
             gl::BindTexture(gl::TEXTURE_2D, diffuse_id);
@@ -635,10 +653,14 @@ impl GameWindow {
             let spec_id = if mat.specular == 0 { self.default_texture } else { mat.specular };
             gl::BindTexture(gl::TEXTURE_2D, spec_id);
             uniform_int!(self.program, "specular_map", 1);
-            gl::ActiveTexture(gl::TEXTURE2);
-            let normal_id = if mat.normal == 0 { self.default_texture } else { mat.normal };
-            gl::BindTexture(gl::TEXTURE_2D, normal_id);
-            uniform_int!(self.program, "normal_map", 2);
+            match mat.normal {
+                Some(normal_id) => {
+                    gl::ActiveTexture(gl::TEXTURE2);
+                    gl::BindTexture(gl::TEXTURE_2D, normal_id);
+                    uniform_int!(self.program, "normal_map", 2);
+                    uniform_int!(self.program, "use_normal_map", 1); },
+                None => { uniform_int!(self.program, "use_normal_map", 0); },
+            };
             uniform_float!(self.program, "specular_coeff", mat.shininess);
             uniform_vec4!(self.program, "color", color_to_vec!(mat.color));
 

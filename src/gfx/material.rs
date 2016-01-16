@@ -16,7 +16,7 @@ pub struct Material {
     pub color: color::Color,
     pub diffuse: GLuint,
     pub specular: GLuint,
-    pub normal: GLuint,
+    pub normal: Option<GLuint>,
     pub shininess: GLfloat,
 }
 
@@ -54,7 +54,10 @@ impl Material {
         let diffuse = Material::read_and_bind(diffuse_name, true);
         let specular = Material::read_and_bind(specular_name, false);
         // TODO: Just use the rgb vec.
-        let normal = Material::read_and_bind(normal_name, false);
+        let normal = match normal_name {
+            Some(_) => Some(Material::read_and_bind(normal_name, false)),
+            None => None,
+        };
         Material { color: color, diffuse: diffuse, specular: specular, normal: normal,
                 shininess: shininess }
     }

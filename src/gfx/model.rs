@@ -29,6 +29,8 @@ pub struct BufferInfo {
 pub struct ModelInfo {
     pub vertices: Vec<GLfloat>,
     pub normals: Vec<GLfloat>,
+    pub bitangents: Vec<GLfloat>,
+    pub tangents: Vec<GLfloat>,
     pub elements: Vec<GLuint>,
     pub tcoords: Vec<GLfloat>,
     pub mat: material::Material,
@@ -38,9 +40,11 @@ pub struct ModelInfo {
 impl ModelInfo {
     // Default constructor with a material.
     pub fn new(vertices: Vec<GLfloat>, elems: Vec<GLuint>, normals: Vec<GLfloat>,
-            tcoords: Vec<GLfloat>, mat: material::Material) -> ModelInfo {
-        ModelInfo { vertices: vertices, normals: normals, elements: elems, tcoords: tcoords,
-                mat: mat, buffer_info: Cell::new(None) }
+            tangents: Vec<GLfloat>, bitangents: Vec<GLfloat>, tcoords: Vec<GLfloat>,
+            mat: material::Material) -> ModelInfo {
+        ModelInfo { vertices: vertices, normals: normals, tangents: tangents,
+                bitangents: bitangents, elements: elems, tcoords: tcoords, mat: mat,
+                buffer_info: Cell::new(None) }
     }
 
     // Creates a box with specified size and color.
@@ -62,14 +66,18 @@ impl ModelInfo {
                 1, 5, 5, 4, 0, 3, 2, 6, 6, 7, 8,
         ];
         let normals: Vec<GLfloat> = vec![0.0; 9 * 3];
+        let tangents: Vec<GLfloat> = vec![0.0; 9 * 3];
+        let bitangents: Vec<GLfloat> = vec![0.0; 9 * 3];
         let uvs: Vec<GLfloat> = vec![0.0; 9 * 2];
-        ModelInfo::new(vertices, elements, normals, uvs, mat)
+        ModelInfo::new(vertices, elements, normals, tangents, bitangents, uvs, mat)
     }
 
     // Creates an ModelInfo from the result of a OBJ decoding.
     pub fn from_obj(object: &obj::DecodedOBJ, mat: material::Material) -> ModelInfo {
         let mut vertices: Vec<GLfloat> = Vec::new();
         let mut normals: Vec<GLfloat> = Vec::new();
+        let mut tangents: Vec<GLfloat> = Vec::new();
+        let mut bitangents: Vec<GLfloat> = Vec::new();
         let mut tcoords: Vec<GLfloat> = Vec::new();
         let mut elements: Vec<GLuint> = Vec::new();
         for vertex in &object.vertices {
@@ -79,6 +87,12 @@ impl ModelInfo {
             normals.push(vertex.norm.x);
             normals.push(vertex.norm.y);
             normals.push(vertex.norm.z);
+            tangents.push(vertex.tangent.x);
+            tangents.push(vertex.tangent.y);
+            tangents.push(vertex.tangent.z);
+            bitangents.push(vertex.bitangent.x);
+            bitangents.push(vertex.bitangent.y);
+            bitangents.push(vertex.bitangent.z);
             tcoords.push(vertex.tc.x);
             tcoords.push(vertex.tc.y);
         }
@@ -87,7 +101,7 @@ impl ModelInfo {
             elements.push(element.1);
             elements.push(element.2);
         }
-        ModelInfo::new(vertices, elements, normals, tcoords, mat)
+        ModelInfo::new(vertices, elements, normals, tangents, bitangents, tcoords, mat)
     }
 
     // Gets a single vector representing the the ModelInfo in VBO format.
@@ -104,6 +118,12 @@ impl ModelInfo {
             vertices.push(self.normals[x]);
             vertices.push(self.normals[x + 1]);
             vertices.push(self.normals[x + 2]);
+            vertices.push(self.tangents[x]);
+            vertices.push(self.tangents[x + 1]);
+            vertices.push(self.tangents[x + 2]);
+            vertices.push(self.bitangents[x]);
+            vertices.push(self.bitangents[x + 1]);
+            vertices.push(self.bitangents[x + 2]);
             vertices.push(self.tcoords[y]);
             vertices.push(self.tcoords[y + 1]);
             y += 2;
