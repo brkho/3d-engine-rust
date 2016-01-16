@@ -190,7 +190,6 @@ pub fn decode_obj(fpath: &str) -> Result<DecodedOBJ, String> {
             _ => (),
         }
     }
-
     for (_, shared_vertex) in nmap.iter() {
         let n_tangent = shared_vertex.tangent.normalize();
         let n_bitangent = shared_vertex.bitangent.normalize();
@@ -199,10 +198,6 @@ pub fn decode_obj(fpath: &str) -> Result<DecodedOBJ, String> {
             vlist[vid.clone()].bitangent = n_bitangent;
         }
     }
-    for vertex in vlist.iter_mut() {
-        println!("name: {}\nnormal: {:?}\ncalculated normal: {:?}\ntangent: {:?}\nbitangent: {:?}\n", fpath, vertex.norm.normalize(), vertex.tangent.cross(vertex.bitangent).normalize(), vertex.tangent, vertex.bitangent);
-    }
-
     Ok(DecodedOBJ { vertices: vlist, elements: elements })
 }
 

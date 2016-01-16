@@ -15,6 +15,7 @@ uniform mat4 normal_matrix;
 uniform mat4 transform;
 
 void main() {
+    // TODO: Orthognalize TBN.
     Normal = normal;
     vec3 T = normalize(vec3(normal_matrix * vec4(tangent, 0.0)));
     vec3 B = normalize(vec3(normal_matrix * vec4(bitangent, 0.0)));
