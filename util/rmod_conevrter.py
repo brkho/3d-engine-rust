@@ -181,20 +181,20 @@ def serialize_float32(num, bytes):
     bytes.extend([ord(elem) for elem in packed])
 
 
-# Serializes a 32 bit signed integer into bytes in a platform independent manner. The number is
-# stored in two's complement and with most significant byte first.
-def serialize_int32(num, bytes):
-    if abs(num) > pow(2, 31):
+# Serializes a 32 bit unsigned integer into bytes in a platform independent manner. The number is
+# stored with most significant byte first.
+def serialize_uint32(num, bytes):
+    if num > pow(2, 32) or num < 0:
         error('Cannot store {} in 4 bytes.'.format(num))
-    packed = struct.pack('>i', num)
+    packed = struct.pack('>I', num)
     bytes.extend([ord(elem) for elem in packed])
     # print ''.join(format(x, '02x') for x in bytes)
 
 # Loads and serializes a texture image given a path.
 def serialize_image(path, bytes):
     if path is None:
-        serialize_int32(0, bytes)
-        serialize_int32(0, bytes)
+        serialize_uint32(0, bytes)
+        serialize_uint32(0, bytes)
         return
     try:
         image = Image.open(path)
@@ -202,8 +202,8 @@ def serialize_image(path, bytes):
         error('Cannot open texture map: {}.'.format(path))
     output('Loaded texture map: {}.'.format(path))
     width, height = image.size
-    serialize_int32(width, bytes)
-    serialize_int32(height, bytes)
+    serialize_uint32(width, bytes)
+    serialize_uint32(height, bytes)
     for pixel in image.getdata():
         serialize_byte(pixel[0], bytes)
         serialize_byte(pixel[1], bytes)
@@ -225,7 +225,7 @@ def main():
     serialize_image(norm, bytes)
     serialize_float32(shininess, bytes)
     element_list, vertex_list = read_input_file(input_name)[0]
-    serialize_int32(len(vertex_list), bytes)
+    serialize_uint32(len(vertex_list), bytes)
     for vertex in vertex_list:
         serialize_float32(vertex.pos[0], bytes)
         serialize_float32(vertex.pos[1], bytes)
@@ -241,9 +241,9 @@ def main():
         serialize_float32(vertex.bitangent[2], bytes)
         serialize_float32(vertex.tcoord[0], bytes)
         serialize_float32(vertex.tcoord[1], bytes)
-    serialize_int32(len(element_list), bytes)
+    serialize_uint32(len(element_list), bytes)
     for element in element_list:
-        serialize_int32(element, bytes)
+        serialize_uint32(element, bytes)
     with open(output_name, 'wb') as of:
         of.write(bytes)
     output("Saved converted model as as {}.".format(output_name))

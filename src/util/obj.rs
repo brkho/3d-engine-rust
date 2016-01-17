@@ -19,20 +19,12 @@ use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader};
 use std::fs::File;
 use std::str::FromStr;
+use util::common;
 
 // The result of a OBJ decoding. This holds information about the vertices and elements.
 pub struct DecodedOBJ {
-    pub vertices: Vec<Vertex>,
+    pub vertices: Vec<common::Vertex>,
     pub elements: Vec<(u32, u32, u32)>,
-}
-
-// Defines what is in a vertex.
-pub struct Vertex {
-    pub pos: Vector3<GLfloat>,
-    pub norm: Vector3<GLfloat>,
-    pub tc: Vector2<GLfloat>,
-    pub bitangent: Vector3<GLfloat>,
-    pub tangent: Vector3<GLfloat>,
 }
 
 // Helper struct used to hold information about shared vertices and their shared normals, tangents,
@@ -99,7 +91,7 @@ fn process_triplet(triplet: &str) -> Result<(u32, u32, u32), String> {
 // Process a triangle face and return a Vector3 from its components. This also calculates the
 // tangent and bitangent based on a face and angle weighted average.
 fn process_face(info: &[&str], vertices: &Vec<Vector3<GLfloat>>, normals: &Vec<Vector3<GLfloat>>,
-        tcoords: &Vec<Vector2<GLfloat>>, vlist: &mut Vec<Vertex>,
+        tcoords: &Vec<Vector2<GLfloat>>, vlist: &mut Vec<common::Vertex>,
         vmap: &mut HashMap<(u32, u32, u32), u32>, nmap: &mut HashMap<u32, SharedVertex>)
         -> Result<(u32, u32, u32), String> {
     if info.len() != 3 {
@@ -127,7 +119,8 @@ fn process_face(info: &[&str], vertices: &Vec<Vector3<GLfloat>>, normals: &Vec<V
             let n = normals[triplet.2 as usize - 1].clone();
 
             vmap.insert(triplet.clone(), vlist.len() as u32);
-            vlist.push(Vertex { pos: v, tc: t, norm: n, bitangent: Vector3::new(0.0, 0.0, 0.0),
+            vlist.push(common::Vertex { pos: v, tc: t, norm: n,
+                    bitangent: Vector3::new(0.0, 0.0, 0.0),
                     tangent: Vector3::new(0.0, 0.0, 0.0) });
         }
         elems.push(vmap.get(&triplet).unwrap().clone());
@@ -170,7 +163,7 @@ pub fn decode_obj(fpath: &str) -> Result<DecodedOBJ, String> {
     let mut normals: Vec<Vector3<GLfloat>> = Vec::new();
     let mut tcoords: Vec<Vector2<GLfloat>> = Vec::new();
     let mut elements: Vec<(u32, u32, u32)> = Vec::new();
-    let mut vlist: Vec<Vertex> = Vec::new();
+    let mut vlist: Vec<common::Vertex> = Vec::new();
     let mut vmap: HashMap<(u32, u32, u32), u32> = HashMap::new();
     let mut nmap: HashMap<u32, SharedVertex> = HashMap::new();
     for line_opt in reader.lines() {

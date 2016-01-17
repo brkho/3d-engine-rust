@@ -1,6 +1,6 @@
-// Utility module that allows for decoding of a BMP given a path to the file. This is only
-// implemented for a very strict subset of possible BMP formats (BITMAPINFOHEADER) without
-// compression. This is the format output by GIMP when exporting as BMP.
+// Utility module that allows for decoding of a .rmod file given a path to a file. The .rmod file
+// format is a binary file format native to the Rust game engine and can be created from a FBX file
+// and texture maps using the rmod_converter.py script.
 //
 // Brian Ho
 // brian@brkho.com
@@ -9,19 +9,62 @@
 use std::fs::File;
 use std::io::Read;
 use std::mem;
-use util::common;
 
-// Data structure representation of the DIBHeader fields we care about.
-struct DIBHeader {
-    width: u32,
-    height: u32,
-    depth: u16,
+// A pixel with color and alpha information in the range 0-255.
+pub struct Pixel {
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
+    pub alpha: u8,
+}
+
+pub struct RMODImage {
+    pub width: u32,
+    pub height: u32,
+    pub data: Vec<Pixel>,
 }
 
 // Return value for a decoded BMP file. This contains a width, height, and an array of pixels with
 // color and alpha information.
-pub struct DecodedBMP {
-    pub image: common::Image,
+pub struct DecodedRMOD {
+    pub diffuse: RMODImage,
+    pub specular: RMODImage,
+    pub normal: RMODImage,
+    pub vertices: RMODVertex,
+    
+
+
+    pub width: u32,
+    pub height: u32,
+    pub data: Vec<Vec<Pixel>>,
+}
+
+impl DecodedBMP {
+    // Helper method that refactors some of the code common to RGB and RGBA vector creation.
+    fn get_vec_helper(&self, rgba: bool) -> Vec<u8> {
+        let mut bmp_data = Vec::new();
+        for row in &self.data {
+            for pixel in row {
+                bmp_data.push(pixel.red);
+                bmp_data.push(pixel.green);
+                bmp_data.push(pixel.blue);
+                if rgba {
+                    bmp_data.push(pixel.alpha);
+                }
+            }
+        }
+        bmp_data
+    }
+
+    // Creates a one dimensional vector representing the BMP data with RGB channels.
+    pub fn get_rgb_vec(&self) -> Vec<u8> {
+        self.get_vec_helper(false)
+    }
+
+    // Creates a one dimensional vector representing the BMP data with RGBA channels.
+    pub fn get_rgba_vec(&self) -> Vec<u8> {
+        self.get_vec_helper(true)
+    }
 }
 
 // Consumes n bytes from the data vector by advancing the cursor while also performing error
@@ -109,9 +152,9 @@ fn read_dib_header(data: &Vec<u8>, cursor: &mut usize) -> Result<DIBHeader, Stri
 
 // Reads in the pixel array from the data vector and returns a vector of Pixels.
 fn read_pixel_array(data: &Vec<u8>, cursor: &mut usize, info: &DIBHeader)
-        -> Result<Vec<common::Pixel>, String> {
+        -> Result<Vec<Vec<Pixel>>, String> {
     let pad_bytes = info.width % 4;
-    let mut pixel_arr: Vec<common::Pixel> = Vec::new();
+    let mut pixel_arr = Vec::new();
     for _ in 0..(info.height) {
         let mut row_vec = Vec::new();
         for _ in 0..(info.width) {
@@ -119,11 +162,10 @@ fn read_pixel_array(data: &Vec<u8>, cursor: &mut usize, info: &DIBHeader)
             let b = try!(read_byte(data, cursor));
             let g = try!(read_byte(data, cursor));
             let r = try!(read_byte(data, cursor));
-            let pixel = common::Pixel { red: r, green: g, blue: b, alpha: a };
+            let pixel = Pixel { red: r, green: g, blue: b, alpha: a };
             row_vec.push(pixel);
         }
-        row_vec.reverse();
-        pixel_arr.extend(row_vec);
+        pixel_arr.push(row_vec);
         try!(consume_n(data, cursor, pad_bytes as usize));
     }
     pixel_arr.reverse();
@@ -141,7 +183,6 @@ pub fn decode_bmp(fpath: &str) -> Result<DecodedBMP, String> {
     try!(read_bmp_header(&data, &mut cursor));
     let info = try!(read_dib_header(&data, &mut cursor));
     let pixel_arr = try!(read_pixel_array(&data, &mut cursor, &info));
-    let image = common::Image { width: info.width, height: info.height, data: pixel_arr };
-    Ok(DecodedBMP { image: image })
+    Ok(DecodedBMP {width: info.width, height: info.height, data: pixel_arr})
 }
 

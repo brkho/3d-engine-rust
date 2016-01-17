@@ -33,7 +33,7 @@ impl Material {
     // method also lets the caller specify if the texture should be in sRGB space or not.
     fn read_and_bind(texture_name: Option<&str>, srgb: bool) -> GLuint { unsafe {
         if let Some(name) = texture_name {
-            let texture = bmp::decode_bmp(name).unwrap();
+            let texture = bmp::decode_bmp(name).unwrap().image;
             let image = texture.get_rgba_vec();
             let mut texture_id = 0;
             gl::GenTextures(1, &mut texture_id);
