@@ -6,21 +6,22 @@
 # a maintained fork of PIL for texture data. This can be obtained through 'pip install Pillow'.
 #
 # Usage:
-# - python rmod_converter.py diffuse specular normal input_file output_file
+# - python rmod_converter.py diffuse specular normal shininess input_file output_file
 #   This invocation takes an input name and an output name. The script attempts to read and convert
 #   the input file and outputs the converted model with the provided output name and textures.
-# - python rmod_converter.py diffuse specular normal input_file
+# - python rmod_converter.py diffuse specular normal shininess input_file
 #   This abbreviated invocation takes an input name. The script attempts to read and convert the
 #   input file and outputs the converted model and textures with the same name and path as the
 #   input file but with the .rmod extention instead.
 # The '_' character can be used to specify an absensce of a texture map. For example:
-# 'python rmod_converter.py diffuse.bmp _ _ model.fbx model.rmod'
+# 'python rmod_converter.py diffuse.bmp _ _ 75.0 model.fbx model.rmod'
 #
 # Brian Ho
 # brian@brkho.com
 
 
 import os
+import struct
 import sys
 import time
 
@@ -48,20 +49,21 @@ def error(msg):
 
 # Helper function that indicates an error in the supplied input parameters.
 def input_error():
-    error('Proper invocation is \'python rmod_converter.py diffuse specular normal input_file ' + 
-        '[output_file]\'.')
+    error('Proper invocation is \'python rmod_converter.py diffuse specular normal shininess ' +
+        'input_file [output_file]\'.')
 
 # Processes the diffuse, specular, and normal arguments.
 def process_texture_args(argv):
     args = []
     for i in xrange(1, 4):
         args.append(argv[i] if argv[i] != '_' else None)
+    args.append(float(argv[4]))
     return args
 
 # Handles the command line case with just an input filename.
 def handle_input(argv):
     args = process_texture_args(argv)
-    input_name = argv[4]
+    input_name = argv[5]
     base_name = os.path.splitext(input_name)[0]
     args.extend([input_name, base_name + '.rmod'])
     return tuple(args)
@@ -69,7 +71,7 @@ def handle_input(argv):
 # Handles the command line case with both input and output filenames.
 def handle_input_output(argv):
     args = process_texture_args(argv)
-    args.extend([argv[4], argv[5]])
+    args.extend([argv[5], argv[6]])
     return tuple(args)
 
 # Converts a FBX data structure into a nice tuple.
@@ -152,7 +154,7 @@ def get_mesh_info(mesh):
             tcoord = get_vertex_info(uvs, 2, vertex_index, vertex_count)
             key = (pos, normal, tangent, bitangent, tcoord)
             if key not in vertex_map:
-                print key
+                # print key
                 new_vertex = Vertex(pos, normal, tangent, bitangent, tcoord)
                 vertex_list.append(new_vertex)
                 vertex_map[key] = len(vertex_map)
@@ -162,15 +164,89 @@ def get_mesh_info(mesh):
         mesh.GetPolygonCount(), len(element_list), len(vertex_list)))
     return (element_list, vertex_list)
 
+# Serializes a single byte into the byte array.
+def serialize_byte(num, bytes):
+    if num > 255 or num < 0:
+        error('Cannot store {} in a single byte.'.format(num))
+    bytes.append(num)
+
+# Serializes a 32 bit floating point number into bytes in a platform independent manner as
+# specified by the IEEE 754. The exponent and the mantissa are stored with most significant byte
+# first.
+def serialize_float32(num, bytes):
+    # Technically we can store a lot more in a float, but let's give it a reasonable bound...
+    if abs(num) > pow(2, 31):
+        error('Cannot store {} in 4 bytes.'.format(num))
+    packed = struct.pack('>f', num)
+    bytes.extend([ord(elem) for elem in packed])
+
+
+# Serializes a 32 bit signed integer into bytes in a platform independent manner. The number is
+# stored in two's complement and with most significant byte first.
+def serialize_int32(num, bytes):
+    if abs(num) > pow(2, 31):
+        error('Cannot store {} in 4 bytes.'.format(num))
+    packed = struct.pack('>i', num)
+    bytes.extend([ord(elem) for elem in packed])
+    # print ''.join(format(x, '02x') for x in bytes)
+
+# Loads and serializes a texture image given a path.
+def serialize_image(path, bytes):
+    if path is None:
+        serialize_int32(0, bytes)
+        serialize_int32(0, bytes)
+        return
+    try:
+        image = Image.open(path)
+    except IOError:
+        error('Cannot open texture map: {}.'.format(path))
+    output('Loaded texture map: {}.'.format(path))
+    width, height = image.size
+    serialize_int32(width, bytes)
+    serialize_int32(height, bytes)
+    for pixel in image.getdata():
+        serialize_byte(pixel[0], bytes)
+        serialize_byte(pixel[1], bytes)
+        serialize_byte(pixel[2], bytes)
+        serialize_byte(pixel[3], bytes)
+
 # Main entry point for the converter.
 def main():
-    handle_arguments = { 5: handle_input, 6: handle_input_output }
+    handle_arguments = { 6: handle_input, 7: handle_input_output }
     if len(sys.argv) not in handle_arguments:
         input_error()
-    diffuse, spec, norm, input_name, output_name = handle_arguments[len(sys.argv)](sys.argv)
+    diffuse, spec, norm, shininess, input_name, output_name = handle_arguments[
+        len(sys.argv)](sys.argv)
     output("Starting conversion of {} and outputting as {}.".format(input_name, output_name))
-    print read_input_file(input_name)
-
+    # Magic header that represents the string "RUSTGAME".
+    bytes = bytearray([82, 85, 83, 84, 71, 65, 77, 69])
+    serialize_image(diffuse, bytes)
+    serialize_image(spec, bytes)
+    serialize_image(norm, bytes)
+    serialize_float32(shininess, bytes)
+    element_list, vertex_list = read_input_file(input_name)[0]
+    serialize_int32(len(vertex_list), bytes)
+    for vertex in vertex_list:
+        serialize_float32(vertex.pos[0], bytes)
+        serialize_float32(vertex.pos[1], bytes)
+        serialize_float32(vertex.pos[2], bytes)
+        serialize_float32(vertex.normal[0], bytes)
+        serialize_float32(vertex.normal[1], bytes)
+        serialize_float32(vertex.normal[2], bytes)
+        serialize_float32(vertex.tangent[0], bytes)
+        serialize_float32(vertex.tangent[1], bytes)
+        serialize_float32(vertex.tangent[2], bytes)
+        serialize_float32(vertex.bitangent[0], bytes)
+        serialize_float32(vertex.bitangent[1], bytes)
+        serialize_float32(vertex.bitangent[2], bytes)
+        serialize_float32(vertex.tcoord[0], bytes)
+        serialize_float32(vertex.tcoord[1], bytes)
+    serialize_int32(len(element_list), bytes)
+    for element in element_list:
+        serialize_int32(element, bytes)
+    with open(output_name, 'wb') as of:
+        of.write(bytes)
+    output("Saved converted model as as {}.".format(output_name))
 
 if __name__ == '__main__':
     try:
@@ -179,7 +255,7 @@ if __name__ == '__main__':
     except ImportError:
         error('Autodesk FBX SDK with Python bindings is required.')
     try:
-        import PIL
+        from PIL import Image
     except ImportError:
         error('Pillow (PIL fork) is required.')
     main()
