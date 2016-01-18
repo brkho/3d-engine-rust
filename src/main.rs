@@ -15,7 +15,7 @@ use mmo::gfx::light;
 use mmo::gfx::material;
 use mmo::gfx::model;
 use mmo::gfx::types::*;
-use mmo::util::obj;
+use mmo::util::{rmod, obj};
 
 use std::path;
 use std::process;
@@ -32,7 +32,7 @@ macro_rules! asset { ($s:expr) => {{
 // Driver test program.
 fn main() {
     let ground = obj::decode_obj(asset!("ground.obj")).unwrap();
-    let bunny = obj::decode_obj(asset!("plane.obj")).unwrap();
+    // let bunny = obj::decode_obj(asset!("plane.obj")).unwrap();
     // let budda = obj::decode_obj("budda.obj").unwrap();
     // let dragon = obj::decode_obj("dragon.obj").unwrap();
     let mut window = GameWindow::new(800, 600, "Engine Test".to_string()).unwrap();
@@ -48,22 +48,20 @@ fn main() {
     let secondary_camera = window.attach_camera(camera2);
     window.set_active_camera(main_camera).unwrap();
 
-    let bunny_mat = material::Material::new_with_color(Some(asset!("stone_diffuse.bmp")),
-            Some(asset!("stone_specular.bmp")), Some(asset!("stone_normal.bmp")),
-            color::Color::new_rgb(1.0, 1.0, 1.0), 75.0);
-    let bunny_info = Rc::new(model::ModelInfo::from_obj(&bunny, bunny_mat));
+    // let bunny_mat = material::Material::new_with_color(Some(asset!("stone_diffuse.bmp")),
+    //         Some(asset!("stone_specular.bmp")), Some(asset!("stone_normal.bmp")),
+    //         color::Color::new_rgb(1.0, 1.0, 1.0), 75.0);
+    let bunny = rmod::decode_rmod(asset!("bunny.rmod")).unwrap();
+    let bunny_info = Rc::new(model::ModelInfo::from_rmod(&bunny));
     let mut bunny_inst = model::ModelInstance::from(bunny_info.clone());
-    bunny_inst.scale = 20.0;
+    bunny_inst.scale = 30.0;
     bunny_inst.pos = Vector3D::new(0.0, 0.0, 0.0);
     bunny_inst.update();
 
-    let ground_mat = material::Material::new_with_color(Some(asset!("box_diffuse.bmp")),
-            Some(asset!("box_spec.bmp")), None,
-            color::Color::new_rgb(1.0, 1.0, 1.0), 140.0);
-    let ground_info = Rc::new(model::ModelInfo::from_obj(&ground, ground_mat));
+    let ground = rmod::decode_rmod(asset!("plane.rmod")).unwrap();
+    let ground_info = Rc::new(model::ModelInfo::from_rmod(&ground));
     let mut ground_inst = model::ModelInstance::from(ground_info.clone());
-    ground_inst.scale = 3.0;
-    ground_inst.pos = Vector3D::new(0.0, 0.0, -1.5);
+    ground_inst.scale = 20.0;
     ground_inst.update();
 
     // let dragon_mat = material::Material::new_with_color(Some(asset!("uvs.bmp")),
@@ -181,7 +179,7 @@ fn main() {
         window.draw_instance(&bunny_inst);
         window.draw_instance(&lb1_inst);
         // window.draw_instance(&lb2_inst);
-        // window.draw_instance(&ground_inst);
+        window.draw_instance(&ground_inst);
         // window.draw_instance(&budda_inst);
         // window.draw_instance(&dragon_inst);
         window.swap_buffers();

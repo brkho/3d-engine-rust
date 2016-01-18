@@ -1,0 +1,16 @@
+Format for output file:
+
+_____________________________________________________________________
+
+MAGIC: RUSTGAME
+DIFFUSE: DIM_X (UINT32) DIM_Y (UINT32) RGBA1 RGBA2 ... RGBAN (UINT8)
+SPECULAR: DIM_X (UINT32) DIM_Y (UINT32) RGBA1 RGBA2 ... RGBAN (UINT8)
+NORMAL: DIM_X (UINT32) DIM_Y (UINT32) RGBA1 RGBA2 ... RGBAN (UINT8)
+SHININESS: FLOAT32
+NUM_VERTICES: N (UINT32)
+VERTEX1: Px Py Pz Nx Ny Nz Tx Ty Tz Bx By Bz TCu TCv (FLOAT32)
+VERTEX2: ...
+VERTEXN: ...
+NUM_FACES: N (UINT32)
+FACES: F1 F2 F3 F4 F5 F6 ... FN (UINT32)
+_____________________________________________________________________

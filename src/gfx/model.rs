@@ -10,12 +10,12 @@
 extern crate cgmath;
 
 use self::cgmath::{Matrix, SquareMatrix};
-
+use gfx::color;
 use gfx::material;
 use gfx::types::*;
 use std::cell::Cell;
 use std::rc::Rc;
-use util::obj;
+use util::{common, obj, rmod};
 
 #[derive(Copy, Clone)]
 pub struct BufferInfo {
@@ -72,18 +72,18 @@ impl ModelInfo {
         ModelInfo::new(vertices, elements, normals, tangents, bitangents, uvs, mat)
     }
 
-    // Creates an ModelInfo from the result of a OBJ decoding.
-    pub fn from_obj(object: &obj::DecodedOBJ, mat: material::Material) -> ModelInfo {
-        let mut vertices: Vec<GLfloat> = Vec::new();
+    // Helper method that refactors the lengthy code used to construct the data lists.
+    fn vertex_to_data(vertices: &Vec<common::Vertex>) ->
+            (Vec<GLfloat>, Vec<GLfloat>, Vec<GLfloat>, Vec<GLfloat>, Vec<GLfloat>) {
+        let mut positions: Vec<GLfloat> = Vec::new();
         let mut normals: Vec<GLfloat> = Vec::new();
         let mut tangents: Vec<GLfloat> = Vec::new();
         let mut bitangents: Vec<GLfloat> = Vec::new();
         let mut tcoords: Vec<GLfloat> = Vec::new();
-        let mut elements: Vec<GLuint> = Vec::new();
-        for vertex in &object.vertices {
-            vertices.push(vertex.pos.x);
-            vertices.push(vertex.pos.y);
-            vertices.push(vertex.pos.z);
+        for vertex in vertices {
+            positions.push(vertex.pos.x);
+            positions.push(vertex.pos.y);
+            positions.push(vertex.pos.z);
             normals.push(vertex.norm.x);
             normals.push(vertex.norm.y);
             normals.push(vertex.norm.z);
@@ -96,12 +96,39 @@ impl ModelInfo {
             tcoords.push(vertex.tc.x);
             tcoords.push(vertex.tc.y);
         }
-        for element in &object.elements {
-            elements.push(element.0);
-            elements.push(element.1);
-            elements.push(element.2);
+        (positions, normals, tangents, bitangents, tcoords)
+    }
+
+    // Helper function to create a ModelInfo and Material from an RMOD decoding with white color.
+    pub fn from_rmod(rmod: &rmod::DecodedRMOD) -> ModelInfo {
+        let color = color::Color::new_rgb(1.0, 1.0, 1.0);
+        ModelInfo::from_rmod_color(rmod, color)
+    }
+
+    // Creates a ModelInfo with corresponding Material from the result of a RMOD decoding with a
+    // specific color. Does a copy right now despite the inefficiency in order to avoid passing
+    // ownership.
+    pub fn from_rmod_color(rmod: &rmod::DecodedRMOD, color: color::Color) -> ModelInfo {
+        let mat =  material::Material::from_images(&rmod.diffuse, &rmod.specular, &rmod.normal,
+                color, rmod.shininess);
+        let (verts, norms, tans, bitans, tcs) = ModelInfo::vertex_to_data(&rmod.vertices);
+        let mut elems: Vec<GLuint> = Vec::new();
+        for element in &rmod.elements {
+            elems.push(element.clone());
         }
-        ModelInfo::new(vertices, elements, normals, tangents, bitangents, tcoords, mat)
+        ModelInfo::new(verts, elems, norms, tans, bitans, tcs, mat)
+    }
+
+    // Creates a ModelInfo from the result of a OBJ decoding.
+    pub fn from_obj(object: &obj::DecodedOBJ, mat: material::Material) -> ModelInfo {
+        let (verts, norms, tans, bitans, tcs) = ModelInfo::vertex_to_data(&object.vertices);
+        let mut elems: Vec<GLuint> = Vec::new();
+        for element in &object.elements {
+            elems.push(element.0);
+            elems.push(element.1);
+            elems.push(element.2);
+        }
+        ModelInfo::new(verts, elems, norms, tans, bitans, tcs, mat)
     }
 
     // Gets a single vector representing the the ModelInfo in VBO format.
