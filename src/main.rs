@@ -96,7 +96,7 @@ fn main() {
     //         42.0);
     // let spot_handle = window.attach_spot_light(spot_obj);
 
-    // let dir_obj = light::DirectionalLight::new(color::Color::new_rgb(1.0, 1.0, 1.0),
+    // let dir_obj = light::DirectionalLight::new(color::Color::new_rgb(0.5, 0.5, 0.5),
     //         Vector3D::new(0.0, 0.0, -1.0));
     // let dir_handle = window.attach_directional_light(dir_obj);
 

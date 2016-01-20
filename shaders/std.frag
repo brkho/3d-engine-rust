@@ -99,6 +99,50 @@ void main() {
         total_color += diffuse + specular;
     }
 
+    light = lights[6];
+    if (light.type != EMPTY_LIGHT) {
+        vec3 position = vec3(model * vec4(Vert, 1.0));
+        vec3 surface_to_light;
+        vec3 intensity;
+
+        if (light.type == DIRECTIONAL_LIGHT) {
+            surface_to_light = -normalize(light.direction);
+            intensity = light.intensity;
+        } else {
+            // Point light.
+            surface_to_light = normalize(light.position - position);
+            float dist = distance(position, light.position);
+            intensity = light.intensity /
+                (light.const_attn + light.linear_attn * dist + light.quad_attn * (dist * dist));
+            if (light.type == SPOT_LIGHT) {
+                // bla = 1.0;
+                float cos_dv = dot(normalize(light.direction), -surface_to_light);
+                if (cos_dv > cos(light.cutoff)) {
+                    intensity *= pow(cos_dv, light.dropoff);
+                } else {
+                    intensity = vec3(0, 0, 0);
+                }
+            }
+        }
+
+        // Get diffuse lighting.
+        float cos_nl = max(dot(surface_to_light, world_normal), 0.0);
+        vec4 diffuse = vec4(cos_nl * intensity * color.rgb *
+                texture(diffuse_map, TCoord).rgb, color.a);
+
+        // Get specular lighting.
+        vec4 specular = vec4(0, 0, 0, 0);
+        if (cos_nl > 0.0) {
+            vec3 surface_to_camera = normalize(camera - position);
+            vec3 halfway = normalize(surface_to_light + surface_to_camera);
+            float cos_nha = pow(max(dot(world_normal, halfway), 0.0), specular_coeff);
+            specular = vec4(cos_nha * texture(specular_map, TCoord).rgb * intensity, 0.0);
+        }
+
+        // Get total lighting.
+        total_color += diffuse + specular;
+    }
+
     vec4 final_color = clamp(total_color, 0.0, 1.0);
     out_color = vec4(pow(final_color.rgb, vec3(1.0 / gamma)), final_color.a);
 }

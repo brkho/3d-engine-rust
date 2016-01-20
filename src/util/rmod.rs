@@ -89,14 +89,15 @@ fn read_f32(data: &Vec<u8>, cursor: &mut usize) -> Result<f32, String> {
     }
 }
 
-// Reads a byte from the byte vector and returns it.
+// Reads a byte from the byte vector and returns it. This requires bit alignment unlike the other
+// methods for efficiency purposes.
 fn read_byte(data: &Vec<u8>, cursor: &mut usize) -> Result<u8, String> {
-    let mut result: u8 = 0;
-    for _ in 0..BITS_PER_BYTE {
-        let value = if try!(read_bit(data, cursor)) { 1 } else { 0 };
-        result = (result * 2) + value;
+    let orig = *cursor;
+    if orig % BITS_PER_BYTE != 0 {
+        return Err("Cannot read unaligned byte.".to_string());
     }
-    Ok(result)
+    try!(consume_n(data, cursor, 8));
+    Ok(data[orig / BITS_PER_BYTE])
 }
 
 // Reads a 32 bit unsigned integer from the byte vector and returns it.
