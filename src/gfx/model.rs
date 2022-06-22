@@ -25,7 +25,7 @@ pub struct BufferInfo {
     pub vao: GLuint,
 }
 
-// Stores information about the model which can be instantiated to create a ModelInstance. 
+// Stores information about the model which can be instantiated to create a ModelInstance.
 pub struct ModelInfo {
     pub vertices: Vec<GLfloat>,
     pub normals: Vec<GLfloat>,
@@ -39,31 +39,61 @@ pub struct ModelInfo {
 
 impl ModelInfo {
     // Default constructor with a material.
-    pub fn new(vertices: Vec<GLfloat>, elems: Vec<GLuint>, normals: Vec<GLfloat>,
-            tangents: Vec<GLfloat>, bitangents: Vec<GLfloat>, tcoords: Vec<GLfloat>,
-            mat: material::Material) -> ModelInfo {
-        ModelInfo { vertices: vertices, normals: normals, tangents: tangents,
-                bitangents: bitangents, elements: elems, tcoords: tcoords, mat: mat,
-                buffer_info: Cell::new(None) }
+    pub fn new(
+        vertices: Vec<GLfloat>,
+        elems: Vec<GLuint>,
+        normals: Vec<GLfloat>,
+        tangents: Vec<GLfloat>,
+        bitangents: Vec<GLfloat>,
+        tcoords: Vec<GLfloat>,
+        mat: material::Material,
+    ) -> ModelInfo {
+        ModelInfo {
+            vertices: vertices,
+            normals: normals,
+            tangents: tangents,
+            bitangents: bitangents,
+            elements: elems,
+            tcoords: tcoords,
+            mat: mat,
+            buffer_info: Cell::new(None),
+        }
     }
 
     // Creates a box with specified size and color.
-    pub fn new_box(scale_x: f32, scale_y: f32, scale_z: f32,
-            mat: material::Material) -> ModelInfo {
+    pub fn new_box(scale_x: f32, scale_y: f32, scale_z: f32, mat: material::Material) -> ModelInfo {
         let vertices: Vec<GLfloat> = vec![
-                -0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x, -0.5 * scale_y, -0.5 * scale_z,
-                 0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
-                -0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-                 0.5 * scale_x, -0.5 * scale_y,  0.5 * scale_z,
-                 0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-                -0.5 * scale_x,  0.5 * scale_y,  0.5 * scale_z,
-                -0.5 * scale_x,  0.5 * scale_y, -0.5 * scale_z,
+            -0.5 * scale_x,
+            -0.5 * scale_y,
+            -0.5 * scale_z,
+            0.5 * scale_x,
+            -0.5 * scale_y,
+            -0.5 * scale_z,
+            0.5 * scale_x,
+            0.5 * scale_y,
+            -0.5 * scale_z,
+            -0.5 * scale_x,
+            0.5 * scale_y,
+            -0.5 * scale_z,
+            -0.5 * scale_x,
+            -0.5 * scale_y,
+            0.5 * scale_z,
+            0.5 * scale_x,
+            -0.5 * scale_y,
+            0.5 * scale_z,
+            0.5 * scale_x,
+            0.5 * scale_y,
+            0.5 * scale_z,
+            -0.5 * scale_x,
+            0.5 * scale_y,
+            0.5 * scale_z,
+            -0.5 * scale_x,
+            0.5 * scale_y,
+            -0.5 * scale_z,
         ];
         let elements: Vec<GLuint> = vec![
-                0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4, 7, 3, 0, 0, 4, 7, 6, 2, 1, 1, 5, 6, 0,
-                1, 5, 5, 4, 0, 3, 2, 6, 6, 7, 8,
+            0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4, 7, 3, 0, 0, 4, 7, 6, 2, 1, 1, 5, 6, 0, 1, 5, 5, 4,
+            0, 3, 2, 6, 6, 7, 8,
         ];
         let normals: Vec<GLfloat> = vec![0.0; 9 * 3];
         let tangents: Vec<GLfloat> = vec![0.0; 9 * 3];
@@ -73,8 +103,15 @@ impl ModelInfo {
     }
 
     // Helper method that refactors the lengthy code used to construct the data lists.
-    fn vertex_to_data(vertices: &Vec<common::Vertex>) ->
-            (Vec<GLfloat>, Vec<GLfloat>, Vec<GLfloat>, Vec<GLfloat>, Vec<GLfloat>) {
+    fn vertex_to_data(
+        vertices: &Vec<common::Vertex>,
+    ) -> (
+        Vec<GLfloat>,
+        Vec<GLfloat>,
+        Vec<GLfloat>,
+        Vec<GLfloat>,
+        Vec<GLfloat>,
+    ) {
         let mut positions: Vec<GLfloat> = Vec::new();
         let mut normals: Vec<GLfloat> = Vec::new();
         let mut tangents: Vec<GLfloat> = Vec::new();
@@ -109,8 +146,13 @@ impl ModelInfo {
     // specific color. Does a copy right now despite the inefficiency in order to avoid passing
     // ownership.
     pub fn from_rmod_color(rmod: &rmod::DecodedRMOD, color: color::Color) -> ModelInfo {
-        let mat =  material::Material::from_images(&rmod.diffuse, &rmod.specular, &rmod.normal,
-                color, rmod.shininess);
+        let mat = material::Material::from_images(
+            &rmod.diffuse,
+            &rmod.specular,
+            &rmod.normal,
+            color,
+            rmod.shininess,
+        );
         let (verts, norms, tans, bitans, tcs) = ModelInfo::vertex_to_data(&rmod.vertices);
         let mut elems: Vec<GLuint> = Vec::new();
         for element in &rmod.elements {
@@ -177,16 +219,29 @@ impl ModelInstance {
         let rot = Quaternion::new(1.0, 0.0, 0.0, 0.0);
         let scale = 1.0;
         let model = cgmath::Matrix4::from(cgmath::Decomposed {
-                scale: scale, rot: rot, disp: pos });
+            scale: scale,
+            rot: rot,
+            disp: pos,
+        });
         let norm = model.clone().invert().unwrap().transpose();
-        ModelInstance { info: info, pos: pos, scale: scale, rot: rot, model: model, normal: norm }
+        ModelInstance {
+            info: info,
+            pos: pos,
+            scale: scale,
+            rot: rot,
+            model: model,
+            normal: norm,
+        }
     }
 
     // Updates the model and normal matrices. This must be called after any sequence of struct
     // field changes for the changes to appear in-world.
     pub fn update(&mut self) {
         let model = cgmath::Matrix4::from(cgmath::Decomposed {
-                scale: self.scale, rot: self.rot, disp: self.pos });
+            scale: self.scale,
+            rot: self.rot,
+            disp: self.pos,
+        });
         let normal = model.clone().invert().unwrap().transpose();
         self.model = model;
         self.normal = normal;

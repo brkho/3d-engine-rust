@@ -6,16 +6,16 @@
 extern crate mmo;
 extern crate time;
 
-use mmo::gfx::color;
 use mmo::gfx::camera;
 use mmo::gfx::camera::Camera;
 use mmo::gfx::camera::EuclideanVector;
+use mmo::gfx::color;
 use mmo::gfx::game_window::*;
 use mmo::gfx::light;
 use mmo::gfx::material;
 use mmo::gfx::model;
 use mmo::gfx::types::*;
-use mmo::util::{rmod, obj};
+use mmo::util::{obj, rmod};
 
 use std::path;
 use std::process;
@@ -24,10 +24,13 @@ use std::thread::sleep;
 use std::time::Duration;
 
 // Macro to easily get asset strings.
-macro_rules! asset { ($s:expr) => {{
-    let mut path = path::PathBuf::from("assets");
-    path.push($s);
-    &path.to_str().unwrap().to_string() }};}
+macro_rules! asset {
+    ($s:expr) => {{
+        let mut path = path::PathBuf::from("assets");
+        path.push($s);
+        &path.to_str().unwrap().to_string()
+    }};
+}
 
 // Driver test program.
 fn main() {
@@ -39,11 +42,21 @@ fn main() {
     window.bg_color = color::Color::new_rgb(0.2, 0.2, 0.2);
 
     let camera1 = camera::PerspectiveCamera::new(
-            Vector3D::new(17.0, 17.0, 17.0), Vector3D::new(0.0, 0.0, 0.0),
-            window.get_aspect_ratio(), 45.0, 0.1, 100.0);
+        Vector3D::new(17.0, 17.0, 17.0),
+        Vector3D::new(0.0, 0.0, 0.0),
+        window.get_aspect_ratio(),
+        45.0,
+        0.1,
+        100.0,
+    );
     let camera2 = camera::PerspectiveCamera::new(
-            Vector3D::new(0.0001, 0.0, 30.0), Vector3D::new(0.0, 0.0, 0.0),
-            window.get_aspect_ratio(), 45.0, 0.1, 100.0);
+        Vector3D::new(0.0001, 0.0, 30.0),
+        Vector3D::new(0.0, 0.0, 0.0),
+        window.get_aspect_ratio(),
+        45.0,
+        0.1,
+        100.0,
+    );
     let main_camera = window.attach_camera(camera1);
     let secondary_camera = window.attach_camera(camera2);
     window.set_active_camera(main_camera).unwrap();
@@ -81,9 +94,13 @@ fn main() {
     // budda_inst.pos = Vector3D::new(3.5, 3.5, 1.0);
     // budda_inst.update();
 
-    let lb_mat = material::Material::new_with_color(None,
-            None, None,
-            color::Color::new_rgb(0.0, 0.0, 0.0), 75.0);
+    let lb_mat = material::Material::new_with_color(
+        None,
+        None,
+        None,
+        color::Color::new_rgb(0.0, 0.0, 0.0),
+        75.0,
+    );
     let lb = Rc::new(model::ModelInfo::new_box(1.0, 1.0, 1.0, lb_mat));
     let mut lb1_inst = model::ModelInstance::from(lb.clone());
     lb1_inst.update();
@@ -100,8 +117,13 @@ fn main() {
     //         Vector3D::new(0.0, 0.0, -1.0));
     // let dir_handle = window.attach_directional_light(dir_obj);
 
-    let pl1_obj = light::PointLight::new(color::Color::new_rgb(1.0, 1.0, 1.0),
-            Vector3D::new(3.0, 3.0, 1.0), 1.0, 0.03, 0.004);
+    let pl1_obj = light::PointLight::new(
+        color::Color::new_rgb(1.0, 1.0, 1.0),
+        Vector3D::new(3.0, 3.0, 1.0),
+        1.0,
+        0.03,
+        0.004,
+    );
     let pl1_handle = window.attach_point_light(pl1_obj);
 
     // let point_light2 = window.attach_point_light(
@@ -128,7 +150,8 @@ fn main() {
         }
 
         // Update Camera.
-        {   if shift_pressed == 0 {
+        {
+            if shift_pressed == 0 {
                 window.set_active_camera(main_camera).unwrap();
             } else {
                 window.set_active_camera(secondary_camera).unwrap();
@@ -142,14 +165,18 @@ fn main() {
             let right = camera.get_right();
             let dir = right * x_dir + fwd * -y_dir;
             camera.pos = camera.pos + dir;
-            camera.target = camera.target; }
+            camera.target = camera.target;
+        }
         window.update_active_camera();
 
         // Update Objects.
         lb1_inst.pos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 1.0);
         lb1_inst.update();
-        lb2_inst.pos = Vector3D::new(0.0, 10.0 * (1.43 * elapsed_time).sin(),
-                10.0 * (1.43 * elapsed_time).cos());
+        lb2_inst.pos = Vector3D::new(
+            0.0,
+            10.0 * (1.43 * elapsed_time).sin(),
+            10.0 * (1.43 * elapsed_time).cos(),
+        );
         lb2_inst.update();
 
         // {   let mut light = window.get_spot_light_mut(spot_handle);
@@ -162,9 +189,11 @@ fn main() {
         //     light.intensity = color::Color::new_rgb(intensity, intensity, intensity); }
         // window.update_directional_light(dir_handle);
 
-        {   let mut light = window.get_point_light_mut(pl1_handle);
+        {
+            let mut light = window.get_point_light_mut(pl1_handle);
             let lpos = Vector3D::new(10.0 * elapsed_time.cos(), 10.0 * elapsed_time.sin(), 1.0);
-            light.position = lpos; }
+            light.position = lpos;
+        }
         window.update_point_light(pl1_handle);
 
         // {   let mut light = window.get_point_light(point_light2);
@@ -198,7 +227,7 @@ fn main() {
                     }
                 }
                 Event::Closed => process::exit(0),
-                _ => ()
+                _ => (),
             }
         }
         // sleep(Duration::from_millis(500));

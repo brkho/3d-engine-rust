@@ -1,8 +1,7 @@
 // Common classes shared between the utility modules.
-// 
+//
 // Brian Ho
 // brian@brkho.com
-
 
 extern crate cgmath;
 extern crate gl;
