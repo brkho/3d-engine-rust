@@ -5,10 +5,9 @@
 // for Maya 2015). I could assign default texture coordinates and calculate normals from the cross
 // product in their absence, but since this is a quick and dirty implementation, this is currently
 // unsupported.
-// 
+//
 // Brian Ho
 // brian@brkho.com
-
 
 extern crate cgmath;
 extern crate gl;
@@ -16,8 +15,8 @@ extern crate gl;
 use self::cgmath::*;
 use self::gl::types::*;
 use std::collections::{HashMap, HashSet};
-use std::io::{BufRead, BufReader};
 use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::str::FromStr;
 use util::common;
 
@@ -74,26 +73,40 @@ fn process_triplet(triplet: &str) -> Result<(u32, u32, u32), String> {
     if split.len() != 3 {
         return Err(face_err);
     }
-    let t1 = if split[0] == "" { None } else {
-            Some(try!(u32::from_str(split[0]).map_err(|e| e.to_string()))) };
-    let t2 = if split[1] == "" { None } else {
-            Some(try!(u32::from_str(split[1]).map_err(|e| e.to_string()))) };
-    let t3 = if split[2] == "" { None } else {
-            Some(try!(u32::from_str(split[2]).map_err(|e| e.to_string()))) };
+    let t1 = if split[0] == "" {
+        None
+    } else {
+        Some(try!(u32::from_str(split[0]).map_err(|e| e.to_string())))
+    };
+    let t2 = if split[1] == "" {
+        None
+    } else {
+        Some(try!(u32::from_str(split[1]).map_err(|e| e.to_string())))
+    };
+    let t3 = if split[2] == "" {
+        None
+    } else {
+        Some(try!(u32::from_str(split[2]).map_err(|e| e.to_string())))
+    };
     let transformed = (t1, t2, t3);
     match transformed {
         (Some(v), Some(t), Some(n)) => Ok((v, t, n)),
         (Some(v), None, Some(n)) => Ok((v, 0, n)),
-        _ => Err(face_err)
+        _ => Err(face_err),
     }
 }
 
 // Process a triangle face and return a Vector3 from its components. This also calculates the
 // tangent and bitangent based on a face and angle weighted average.
-fn process_face(info: &[&str], vertices: &Vec<Vector3<GLfloat>>, normals: &Vec<Vector3<GLfloat>>,
-        tcoords: &Vec<Vector2<GLfloat>>, vlist: &mut Vec<common::Vertex>,
-        vmap: &mut HashMap<(u32, u32, u32), u32>, nmap: &mut HashMap<u32, SharedVertex>)
-        -> Result<(u32, u32, u32), String> {
+fn process_face(
+    info: &[&str],
+    vertices: &Vec<Vector3<GLfloat>>,
+    normals: &Vec<Vector3<GLfloat>>,
+    tcoords: &Vec<Vector2<GLfloat>>,
+    vlist: &mut Vec<common::Vertex>,
+    vmap: &mut HashMap<(u32, u32, u32), u32>,
+    nmap: &mut HashMap<u32, SharedVertex>,
+) -> Result<(u32, u32, u32), String> {
     if info.len() != 3 {
         return Err("The decoder only supports triangle meshes.".to_string());
     }
@@ -106,8 +119,10 @@ fn process_face(info: &[&str], vertices: &Vec<Vector3<GLfloat>>, normals: &Vec<V
             // TODO: Make this code actually efficient and not just one giant hack with hashes.
             if !nmap.contains_key(&triplet.0) {
                 let shared_vertex = SharedVertex {
-                    bitangent: Vector3::new(0.0, 0.0, 0.0), tangent: Vector3::new(0.0, 0.0, 0.0),
-                    vertices: HashSet::new() };
+                    bitangent: Vector3::new(0.0, 0.0, 0.0),
+                    tangent: Vector3::new(0.0, 0.0, 0.0),
+                    vertices: HashSet::new(),
+                };
                 nmap.insert(triplet.0, shared_vertex);
             }
             let mut shared_vertex = nmap.get_mut(&triplet.0).unwrap();
@@ -115,13 +130,21 @@ fn process_face(info: &[&str], vertices: &Vec<Vector3<GLfloat>>, normals: &Vec<V
 
             let v = vertices[triplet.0 as usize - 1].clone();
             let t = if triplet.1 == 0 {
-                    Vector2::new(0.0, 0.0) } else { tcoords[triplet.1 as usize - 1] }.clone();
+                Vector2::new(0.0, 0.0)
+            } else {
+                tcoords[triplet.1 as usize - 1]
+            }
+            .clone();
             let n = normals[triplet.2 as usize - 1].clone();
 
             vmap.insert(triplet.clone(), vlist.len() as u32);
-            vlist.push(common::Vertex { pos: v, tc: t, norm: n,
-                    bitangent: Vector3::new(0.0, 0.0, 0.0),
-                    tangent: Vector3::new(0.0, 0.0, 0.0) });
+            vlist.push(common::Vertex {
+                pos: v,
+                tc: t,
+                norm: n,
+                bitangent: Vector3::new(0.0, 0.0, 0.0),
+                tangent: Vector3::new(0.0, 0.0, 0.0),
+            });
         }
         elems.push(vmap.get(&triplet).unwrap().clone());
     }
@@ -169,17 +192,20 @@ pub fn decode_obj(fpath: &str) -> Result<DecodedOBJ, String> {
     for line_opt in reader.lines() {
         let line = line_opt.unwrap();
         let split: Vec<_> = line.split(char::is_whitespace).collect();
-        if split.is_empty() { continue; }
+        if split.is_empty() {
+            continue;
+        }
         let key = split[0];
         let args = &split[1..];
         match key {
-            "v" => { vertices.push(try!(process_vertex(args))) },
-            "vt" => { tcoords.push(try!(process_tcoord(args))) },
-            "vn" => { normals.push(try!(process_normal(args))) },
+            "v" => vertices.push(try!(process_vertex(args))),
+            "vt" => tcoords.push(try!(process_tcoord(args))),
+            "vn" => normals.push(try!(process_normal(args))),
             "f" => {
                 elements.push(try!(process_face(
-                        args, &vertices, &normals, &tcoords, &mut vlist,
-                        &mut vmap, &mut nmap))); },
+                    args, &vertices, &normals, &tcoords, &mut vlist, &mut vmap, &mut nmap
+                )));
+            }
             _ => (),
         }
     }
@@ -191,6 +217,8 @@ pub fn decode_obj(fpath: &str) -> Result<DecodedOBJ, String> {
             vlist[vid.clone()].bitangent = n_bitangent;
         }
     }
-    Ok(DecodedOBJ { vertices: vlist, elements: elements })
+    Ok(DecodedOBJ {
+        vertices: vlist,
+        elements: elements,
+    })
 }
-

@@ -52,14 +52,16 @@ fn read_bit(data: &Vec<u8>, cursor: &mut usize) -> Result<bool, String> {
     try!(consume_n(data, cursor, 1));
     let byte = data[orig / BITS_PER_BYTE];
     let bit = byte & BIT_MASK[(orig % BITS_PER_BYTE)];
-    return Ok(if bit == 0 { false } else { true })
+    return Ok(if bit == 0 { false } else { true });
 }
 
 // Reads n bits from the byte vector and returns it as an unsigned 32 bit integer. This is a bit
 // inefficient because sometimes we want to read less than 32 bits and immediately cast to a
 // smaller type like u8, but oh well.
 fn read_n_bits(data: &Vec<u8>, cursor: &mut usize, n: usize) -> Result<u32, String> {
-    if n > 32 { return Err("Too many bits to read at once.".to_string()); }
+    if n > 32 {
+        return Err("Too many bits to read at once.".to_string());
+    }
     let mut result: u32 = 0;
     for _ in 0..n {
         let value = if try!(read_bit(data, cursor)) { 1 } else { 0 };
@@ -77,7 +79,9 @@ fn read_f32(data: &Vec<u8>, cursor: &mut usize) -> Result<f32, String> {
     let mut changed = false;
     for _ in 0..23 {
         let value = try!(read_bit(data, cursor));
-        if value { changed = true; }
+        if value {
+            changed = true;
+        }
         divisor /= 2.0;
         mantissa += (if value { 1 } else { 0 }) as f32 * divisor;
     }
@@ -109,7 +113,9 @@ fn read_u32(data: &Vec<u8>, cursor: &mut usize) -> Result<u32, String> {
 fn read_magic_header(data: &Vec<u8>, cursor: &mut usize) -> Result<(), String> {
     for i in 0..8 {
         let byte = try!(read_byte(data, cursor));
-        if byte != RUSTGAME_MAGIC[i] { return Err("Magic header is invalid.".to_string()); }
+        if byte != RUSTGAME_MAGIC[i] {
+            return Err("Magic header is invalid.".to_string());
+        }
     }
     Ok(())
 }
@@ -118,16 +124,27 @@ fn read_magic_header(data: &Vec<u8>, cursor: &mut usize) -> Result<(), String> {
 fn read_image(data: &Vec<u8>, cursor: &mut usize) -> Result<Option<common::Image>, String> {
     let width = try!(read_u32(data, cursor));
     let height = try!(read_u32(data, cursor));
-    if width == 0 || height == 0 { return Ok(None); }
+    if width == 0 || height == 0 {
+        return Ok(None);
+    }
     let mut pixels: Vec<common::Pixel> = Vec::new();
     for _ in 0..(width * height) {
         let r = try!(read_byte(data, cursor));
         let g = try!(read_byte(data, cursor));
         let b = try!(read_byte(data, cursor));
         let a = try!(read_byte(data, cursor));
-        pixels.push(common::Pixel { red: r, green: g, blue: b, alpha: a });
+        pixels.push(common::Pixel {
+            red: r,
+            green: g,
+            blue: b,
+            alpha: a,
+        });
     }
-    let image = common::Image { width: width, height: height, data: pixels };
+    let image = common::Image {
+        width: width,
+        height: height,
+        data: pixels,
+    };
     Ok(Some(image))
 }
 
@@ -153,8 +170,13 @@ fn read_vertex(data: &Vec<u8>, cursor: &mut usize) -> Result<common::Vertex, Str
     let tangent = try!(read_vec3(data, cursor));
     let bitangent = try!(read_vec3(data, cursor));
     let tcoord = try!(read_vec2(data, cursor));
-    let vertex = common::Vertex { pos: position, norm: normal, tangent: tangent,
-            bitangent: bitangent, tc: tcoord };
+    let vertex = common::Vertex {
+        pos: position,
+        norm: normal,
+        tangent: tangent,
+        bitangent: bitangent,
+        tc: tcoord,
+    };
     Ok(vertex)
 }
 
@@ -184,8 +206,13 @@ pub fn decode_rmod(fpath: &str) -> Result<DecodedRMOD, String> {
     if cursor != data.len() * BITS_PER_BYTE {
         return Err("RMOD file is improperly sized.".to_string());
     }
-    let rmod_file = DecodedRMOD { diffuse: diffuse, specular: specular, normal: normal,
-            vertices: vertices, elements: elements, shininess: shininess };
+    let rmod_file = DecodedRMOD {
+        diffuse: diffuse,
+        specular: specular,
+        normal: normal,
+        vertices: vertices,
+        elements: elements,
+        shininess: shininess,
+    };
     Ok(rmod_file)
 }
-

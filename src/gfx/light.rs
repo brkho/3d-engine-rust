@@ -24,10 +24,21 @@ pub struct PointLight {
 
 impl PointLight {
     // Default constructor for a PointLight.
-    pub fn new(intensity: color::Color, position: Vector3D, const_attn: f32, linear_attn: f32,
-            quad_attn: f32) -> PointLight {
-        PointLight { intensity: intensity, position: position, const_attn: const_attn,
-                linear_attn: linear_attn, quad_attn: quad_attn, light_index: None }
+    pub fn new(
+        intensity: color::Color,
+        position: Vector3D,
+        const_attn: f32,
+        linear_attn: f32,
+        quad_attn: f32,
+    ) -> PointLight {
+        PointLight {
+            intensity: intensity,
+            position: position,
+            const_attn: const_attn,
+            linear_attn: linear_attn,
+            quad_attn: quad_attn,
+            light_index: None,
+        }
     }
 }
 
@@ -41,7 +52,11 @@ pub struct DirectionalLight {
 impl DirectionalLight {
     // Default constructor for a DirectionalLight.
     pub fn new(intensity: color::Color, direction: Vector3D) -> DirectionalLight {
-        DirectionalLight { intensity: intensity, direction: direction, light_index: None }
+        DirectionalLight {
+            intensity: intensity,
+            direction: direction,
+            light_index: None,
+        }
     }
 }
 
@@ -61,11 +76,26 @@ pub struct SpotLight {
 
 impl SpotLight {
     // Default constructor for a SpotLight.
-    pub fn new(intensity: color::Color, position: Vector3D, direction: Vector3D, const_attn: f32,
-            linear_attn: f32, quad_attn: f32, cutoff: f32, dropoff: f32) -> SpotLight {
-        SpotLight { intensity: intensity, position: position, const_attn: const_attn,
-                direction: direction, linear_attn: linear_attn, quad_attn: quad_attn,
-                cutoff: cutoff, dropoff: dropoff, light_index: None }
-
+    pub fn new(
+        intensity: color::Color,
+        position: Vector3D,
+        direction: Vector3D,
+        const_attn: f32,
+        linear_attn: f32,
+        quad_attn: f32,
+        cutoff: f32,
+        dropoff: f32,
+    ) -> SpotLight {
+        SpotLight {
+            intensity: intensity,
+            position: position,
+            const_attn: const_attn,
+            direction: direction,
+            linear_attn: linear_attn,
+            quad_attn: quad_attn,
+            cutoff: cutoff,
+            dropoff: dropoff,
+            light_index: None,
+        }
     }
 }

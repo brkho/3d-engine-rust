@@ -5,7 +5,6 @@
 // Brian Ho
 // brian@brkho.com
 
-
 use std::fs::File;
 use std::io::Read;
 use std::mem;
@@ -36,8 +35,7 @@ fn consume_n(data: &Vec<u8>, cursor: &mut usize, n: usize) -> Result<(), String>
 }
 
 // Reads and consumes n bytes from the data vector and returns a slice of the data if successful.
-fn read_n_bytes<'a>(data: &'a Vec<u8>, cursor: &mut usize, n: usize)
-        -> Result<&'a [u8], String> {
+fn read_n_bytes<'a>(data: &'a Vec<u8>, cursor: &mut usize, n: usize) -> Result<&'a [u8], String> {
     let orig = *cursor;
     try!(consume_n(data, cursor, n));
     Ok(&data[orig..(orig + n)])
@@ -83,7 +81,7 @@ fn read_bmp_header(data: &Vec<u8>, cursor: &mut usize) -> Result<(), String> {
     let orig = *cursor;
     try!(consume_n(data, cursor, 14));
     if data[orig] != ('B' as u8) || data[orig + 1] != ('M' as u8) {
-        return Err("BMP file header has incorrect magic values.".to_string())
+        return Err("BMP file header has incorrect magic values.".to_string());
     }
     Ok(())
 }
@@ -104,22 +102,38 @@ fn read_dib_header(data: &Vec<u8>, cursor: &mut usize) -> Result<DIBHeader, Stri
         _ => return Err("Unsupported bit depth.".to_string()),
     };
     try!(consume_n(data, cursor, length as usize - 16));
-    Ok(DIBHeader {width: width, height: height, depth: depth})
+    Ok(DIBHeader {
+        width: width,
+        height: height,
+        depth: depth,
+    })
 }
 
 // Reads in the pixel array from the data vector and returns a vector of Pixels.
-fn read_pixel_array(data: &Vec<u8>, cursor: &mut usize, info: &DIBHeader)
-        -> Result<Vec<common::Pixel>, String> {
+fn read_pixel_array(
+    data: &Vec<u8>,
+    cursor: &mut usize,
+    info: &DIBHeader,
+) -> Result<Vec<common::Pixel>, String> {
     let pad_bytes = info.width % 4;
     let mut pixel_arr: Vec<common::Pixel> = Vec::new();
     for _ in 0..(info.height) {
         let mut row_vec = Vec::new();
         for _ in 0..(info.width) {
-            let a = if info.depth == 24 { 0 } else { try!(read_byte(data, cursor)) };
+            let a = if info.depth == 24 {
+                0
+            } else {
+                try!(read_byte(data, cursor))
+            };
             let b = try!(read_byte(data, cursor));
             let g = try!(read_byte(data, cursor));
             let r = try!(read_byte(data, cursor));
-            let pixel = common::Pixel { red: r, green: g, blue: b, alpha: a };
+            let pixel = common::Pixel {
+                red: r,
+                green: g,
+                blue: b,
+                alpha: a,
+            };
             row_vec.push(pixel);
         }
         row_vec.reverse();
@@ -141,7 +155,10 @@ pub fn decode_bmp(fpath: &str) -> Result<DecodedBMP, String> {
     try!(read_bmp_header(&data, &mut cursor));
     let info = try!(read_dib_header(&data, &mut cursor));
     let pixel_arr = try!(read_pixel_array(&data, &mut cursor, &info));
-    let image = common::Image { width: info.width, height: info.height, data: pixel_arr };
+    let image = common::Image {
+        width: info.width,
+        height: info.height,
+        data: pixel_arr,
+    };
     Ok(DecodedBMP { image: image })
 }
-
